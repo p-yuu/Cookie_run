@@ -2,22 +2,34 @@ import pygame
 import os
 import random
 
+#------------------------------ network init ------------------------------
+import json
+import socket
+import threading
+
+SERVER_IP = "127.0.0.1" # 要改
+SERVER_PORT = 5000
+#---------------------------------------------------------------------------
+
+# 變數
 FPS = 60
 BACKGROUND = (191,221,226)
 YELLOW = (222,130,9)
+LIGHT_YELLOW = (247,228,170)
 RED = (200,74,51)
 BLACK = (0,0,0)
+WHITE = (255,255,255)
 
 WIDTH = 900
 HEIGHT = 500
 
-#遊戲初始化
+# pygame 初始化
 pygame.init()
 SCREEN = pygame.display.set_mode((WIDTH,HEIGHT))
 pygame.display.set_caption("Cookie Run")
 CLOCK = pygame.time.Clock()
 
-#image
+# image
 RUNNING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_RUN1.PNG")).convert_alpha(), (85,110)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_RUN2.PNG")).convert_alpha(), (85,110))]
 JUMPING = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_JUMP.PNG")).convert_alpha(), (85,110))
@@ -152,7 +164,7 @@ def draw_lives(SCREEN, lives, img, x, y):
 
 #obstacle
 class Obstacle(pygame.sprite.Sprite):
-    def __init__(self, images, y):
+    def __init__(self, images, y, kind, idx):
         pygame.sprite.Sprite.__init__(self)
 
         self.image = images
@@ -160,6 +172,8 @@ class Obstacle(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = WIDTH
         self.rect.y = y
+        self.index = idx # for json
+        self.kind = kind # for json
 
     def update(self):
         self.rect.x -= game_speed
@@ -167,15 +181,15 @@ class Obstacle(pygame.sprite.Sprite):
             self.kill()
 
 def Small_OBT():
-    img = random.choice(SMALL_OBT)
-    return Obstacle(img, 320) # 回傳圖片為 list
+    idx = random.randint(0,2)
+    return Obstacle(SMALL_OBT[idx], 320, "small", idx)
 
 def Large_OBT():
-    img = random.choice(LARGE_OBT)
-    return Obstacle(img, 265)
+    idx = random.randint(0,2)
+    return Obstacle(LARGE_OBT[idx], 265, "large", idx)
 
 def Fly_OBT():
-    return Obstacle(FLYING, 270)
+    return Obstacle(FLYING, 270, "fly", 0)
 
 def hide_obstacle(): # 隱藏障礙物
     global obstacle_hidden, obstacle_time # 取得全域變數並修改他，而非創建新的變數
@@ -234,12 +248,92 @@ class Background(pygame.sprite.Sprite):
         if self.rect.right <= 0:
             self.rect.x += self.rect.width * 2
 
-def draw_menu(mode):
+def reset_game():
+    global player_group, bg_group, obstacle_group, buff_group
+    global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
+    global die, game_over, game_state, opponent_player, opponent_obstacle, opponent_points
+    global last_send_time, countdown_start_time, game_started, no_opponent, opp_die
+    
+    # ------- 重建玩家和背景 -------
+    player_group = pygame.sprite.Group()
+    player = Player()
+    player_group.add(player)
+
+    bg_group = pygame.sprite.Group()
+    bg_group.add(Background(BG, 'bg'))
+    bg_group.add(Background(BG, 'bg', WIDTH))
+    bg_group.add(Background(TRACK, 'track'))
+    bg_group.add(Background(TRACK, 'track', WIDTH))
+
+    obstacle_group = pygame.sprite.Group()
+    buff_group = pygame.sprite.Group()
+
+    # ---------- 變數重置 ----------
+    # 基本設定
+    game_speed = 10
+    distance = 0
+    points = 0
+    obstacle_hidden = False
+    obstacle_time = 0
+    buff_count = 0
+
+    # 雙人 PK 設定
+    opp_die = False           # 對手死了我沒死
+    die = False               # 我死了對手沒死
+    game_started = False
+    game_over = False         # 雙方都死了，遊戲結束
+    game_state = None         # 勝負
+    no_opponent = False       # 沒有配對到對手
+
+    # 創建影子角色
+    opponent_player = None
+    opponent_obstacle = None
+    opponent_points = 0
+
+    # 計時
+    last_send_time = 0          # 傳送資料
+    countdown_start_time = None # 倒數計時
+
+    return player
+
+def draw_start_menu():
+    global online_mode
+
     SCREEN.blit(MENU, (0,0))
-    if mode == 'init':
-        draw_text(SCREEN, 'DOCK DOCK DOCK !!', 60, 670, 170, YELLOW)
-        draw_text(SCREEN, 'press any key to', 50, 650, 240, YELLOW)
-        draw_text(SCREEN, 'start the game', 50, 650, 290, YELLOW)
+    draw_text(SCREEN, 'DOCK DOCK DOCK !!', 60, 670, 170, YELLOW)
+
+    single_rect = pygame.Rect(550, 265, 200, 50)
+    multi_rect = pygame.Rect(550, 330, 200, 50)
+    pygame.draw.rect(SCREEN, LIGHT_YELLOW, single_rect)
+    pygame.draw.rect(SCREEN, LIGHT_YELLOW, multi_rect)
+    draw_text(SCREEN, 'Single Plyer', 50, 650, 260, YELLOW)
+    draw_text(SCREEN, 'Battle', 50, 650, 330, YELLOW)
+
+    pygame.display.update()
+    waiting = True
+    while waiting:
+        CLOCK.tick(FPS)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return True
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if single_rect.collidepoint(event.pos):
+                    online_mode = False
+                    print("offline mode")
+                elif multi_rect.collidepoint(event.pos):
+                    online_mode = True
+                    print("online mode")
+                return False
+            
+def draw_finish_menu():
+    SCREEN.blit(MENU, (0,0))
+    if online_mode:
+        draw_text(SCREEN, f'YOU {game_state}', 70, 650, 140, RED)
+        draw_text(SCREEN, str(points), 50, 650, 230, RED)
+        draw_text(SCREEN, 'V.S', 50, 650, 300, RED)
+        draw_text(SCREEN, str(opponent_points), 50, 650, 370, RED)
+        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 450, RED)
     else:
         draw_text(SCREEN, 'GAME OVER', 70, 650, 170, RED)
         draw_text(SCREEN, f'Final Score: {points}', 60, 660, 240, RED)
@@ -254,52 +348,272 @@ def draw_menu(mode):
                 return True
             elif event.type == pygame.KEYUP:
                 waiting = False
-                return False    
+                return False   
+
+def draw_eliminated_overlay(SCREEN, rect):
+    overlay = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA) # 使圖形可以半透明
+    overlay.fill((0,0,0,150))
+    SCREEN.blit(overlay, rect.topleft)
+
+    draw_text(SCREEN, "ELIMINATED", 60, rect.centerx, rect.centery, RED)
+
+#------------------------------ network ---------------------------------------
+def input_room():
+    room = ""
+    active = True
+
+    while active:
+        SCREEN.fill((220,220,220))
+        draw_text(SCREEN, f"Enter Room ID: {room}", 40, 450, 200)
+        pygame.display.update()
+
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                return None
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_RETURN:
+                    return room
+                elif e.key == pygame.K_BACKSPACE:
+                    room = room[:-1]  # 刪掉最後一個字元
+                else:
+                    room += e.unicode # 實際輸入的字元
+
+def init_network():
+    global client_socket, online_mode
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((SERVER_IP, SERVER_PORT))
+        room = input_room()
+        if not room:
+            online_mode = False
+            return False
+        client_socket.sendall(f"ROOM {room}\n".encode())
+        
+        threading.Thread(            # 開一個背景分身 (可同時執行遊戲跟接收)
+            target=listen_server,    # 執行哪個函式
+            args=(client_socket,),   # 傳遞參數 (tuple)
+            daemon=True              # 定義此thread為背景執行緒 (主程式結束自動結束)
+        ).start()                    # 啟動 thread
+
+        online_mode = True
+        print("online mode")
+        return True
+    except:
+        online_mode = False
+        print("offline mode")
+        return False
+
+def reset_network_state():
+    global game_started, online_mode, client_socket, opponent_state
+    game_started = False
+    try:
+        client_socket.close()
+    except:
+        pass
+
+def listen_server(sock):
+    global opponent_player, opponent_obstacle, online_mode, countdown_start_time
+    global game_state, game_over, game_started, no_opponent, opp_die
+    buffer = ""
+
+    while online_mode == True:
+        try:
+            data = sock.recv(8192)
+            if not data:
+                break
+
+            buffer += data.decode()
+            while "\n" in buffer:
+                msg, buffer = buffer.split("\n", 1)
+
+                if msg == "START":
+                    countdown_start_time = pygame.time.get_ticks()
+                if msg == "NO_OPPONENT":
+                    no_opponent = True
+                elif msg == "WIN" or msg == "LOSE" or msg == "DRAW":
+                    game_over = True
+                    game_state = msg
+                else:
+                    payload = json.loads(msg)
+                    if payload["type"] == "PLAYER_STATE":
+                        opponent_player = payload
+                        if opponent_player["lives"] == 0:
+                            opp_die = True
+                    elif payload['type'] == "OBSTACLES_STATE":
+                        opponent_obstacle = payload
+
+        except json.JSONDecodeError:   # 半包 / 黏包，正常，忽略
+            continue
+
+        except OSError:   # 真正斷線
+            online_mode = False
+            break
+
+        except Exception as e:
+            print("[listen_server error]", e)
+            continue
+
+def send_player_state(sock, player, points):
+    data = {
+        "type": "PLAYER_STATE",
+        "x": player.rect.x,
+        "y": player.rect.y,
+        "is_jump": player.is_jump,
+        "is_slide": player.is_slide,
+        "points": points,
+        "lives": player.lives,
+    }
+    message = json.dumps(data).encode() + b'\n' # dict 轉換成 JSON 再轉成 bytes
+    sock.sendall(message)
+
+def send_obstacles_state(sock, obstacles, buff):
+    data = {
+        "type": "OBSTACLES_STATE",
+        "obstacles": [{"x": o.rect.x, "y": o.rect.y, "kind": o.kind, "index": o.index} for o in obstacles],
+        "buffs": [{"x": b.rect.x, "y": b.rect.y, "effect": b.get_effect()} for b in buff]
+    }
+    message = json.dumps(data).encode() + b'\n'
+    sock.sendall(message)
+
+def get_scaled(img, scale): # 縮放圖片
+    key = (img, scale)
+    if key not in scale_cache:
+        w, h = img.get_size()
+        scale_cache[key] = pygame.transform.scale(img, (int(w * scale), int(h * scale)))
+    return scale_cache[key]
+
+def draw_group_scaled(SCREEN, group, scale = 1.0, offset = (0,0)): # 繪製縮放過的圖片
+    for sprite in group:
+        img = get_scaled(sprite.image, scale)
+        x = int(sprite.rect.x * scale + offset[0])
+        y = int(sprite.rect.y * scale + offset[1])
+        SCREEN.blit(img, (x,y))
+
+# 繪製影子對手
+def draw_opponent(state, scale, offset):
+    global opponent_points
+
+    if not state:
+        return
+    
+    if state.get("is_jump"):
+        img = JUMPING
+    elif state.get("is_slide"):
+        img = SLIDING[0]
+    else:
+        img = RUNNING[0]
+    img = get_scaled(img, scale)
+    x = int(state["x"] * scale + offset[0])
+    y = int(state["y"] * scale + offset[1])
+    opponent_points = state["points"]
+
+    img = img.copy()
+    img.set_alpha(150) # 透明度: 0 ~ 255
+    SCREEN.blit(img, (x, y))
+
+def draw_opponent_obstacle(state, scale, offset):
+    if not state:
+        return
+
+    for o in state["obstacles"]:
+        if o["kind"] == "small":
+            img = SMALL_OBT[o["index"]]
+        elif o["kind"] == "large":
+            img = LARGE_OBT[o["index"]]
+        else:
+            img = FLYING
+
+        img = get_scaled(img, scale)
+        x = int(o["x"] * scale + offset[0])
+        y = int(o["y"] * scale + offset[1])
+
+        img = img.copy()
+        img.set_alpha(150)
+        SCREEN.blit(img, (x, y))
+
+    for b in state["buffs"]:
+        img = BUFF if b["effect"] > 0 else DEBUFF
+        img = get_scaled(img, scale)
+        x = int(b["x"] * scale + offset[0])
+        y = int(b["y"] * scale + offset[1])
+
+        img = img.copy()
+        img.set_alpha(150)
+        SCREEN.blit(img, (x, y))
+
+#--------------------------------------------------------------------------
 
 #遊戲迴圈
 show_init = True
 show_finish = False
-first_start = True
 running = True
+
+online_mode = False
+
+my_offset = (0,0)
+opp_offset = (0,HEIGHT // 2)
+scale = 0.5
+scale_cache = {}
+
+countdown_seconds = 3
 
 while running:
     #------------------------ 開始 / 結束設定 -------------------------
     if show_init:
-        if first_start:
-            close = draw_menu('init')
-            if close:
-                break
+        close = draw_start_menu()
+        if close:
+            break
+
+        if online_mode:
+            success = init_network()
+            if not success:
+                reset_network_state()
+                show_init = True
+                continue
+
+        player = reset_game()
         show_init = False
-        first_start = False
-        #Group
-        player_group = pygame.sprite.Group()
-        player = Player()
-        player_group.add(player)
-
-        bg_group = pygame.sprite.Group()
-        bg_group.add(Background(BG, 'bg'))
-        bg_group.add(Background(BG, 'bg', WIDTH))
-        bg_group.add(Background(TRACK, 'track'))
-        bg_group.add(Background(TRACK, 'track', WIDTH))
-
-        obstacle_group = pygame.sprite.Group()
-        buff_group = pygame.sprite.Group()
-
-        #global variables
-        game_speed = 10 # 4 ~ 19
-        distance = 0
-        points = 0
-        obstacle_hidden = False
-        obstacle_time = 0
-        buff_count = 0
     
     if show_finish:
-        close = draw_menu('finish')
+        close = draw_finish_menu()
         if close: 
             break
+        reset_network_state()
         show_finish = False
         show_init = True
         continue # 避免遊戲邏輯執行
+
+    # 遊戲準備及倒數
+    if not game_started:
+        if no_opponent:
+            print("no opponent found") ##
+            reset_network_state()
+            show_init = True
+            countdown_start_time = None
+            continue
+
+        if countdown_start_time is None: # 是不是同一個物件
+            if not online_mode:
+                countdown_start_time = pygame.time.get_ticks()
+            else:
+                SCREEN.fill(BACKGROUND)
+                draw_text(SCREEN, "Waiting for opponent...", 60, WIDTH // 2, HEIGHT // 2 - 60, YELLOW)
+                pygame.display.update()
+                CLOCK.tick(30)
+                continue
+        remaining = countdown_seconds - ((pygame.time.get_ticks() - countdown_start_time) // 1000)
+        SCREEN.fill(BACKGROUND)
+        if remaining > 0:
+            draw_text(SCREEN, str(remaining), 120, WIDTH // 2, HEIGHT // 2 - 50, YELLOW)
+        else:
+            draw_text(SCREEN, "GO!", 120, WIDTH // 2, HEIGHT // 2 - 50, YELLOW)
+            game_started = True
+            countdown_start_time = None
+        
+        pygame.display.update()
+        CLOCK.tick(30)
+        continue
 
     # CLOCK.tick(FPS) # 一秒 FPS 幀 (FPS 次迴圈) 同時回傳上一幀教過的毫秒數
     distance += game_speed * (CLOCK.tick(FPS) / 1000) # 一幀的秒數 * 速率 = 一幀的距離
@@ -352,11 +666,31 @@ while running:
                 buff_group.add(buff)
                 buff_count += 1
 
+    #---------------------------- 發送狀態 ----------------------------
+    now = pygame.time.get_ticks()
+    if online_mode and client_socket and not die and not game_over:
+        if now - last_send_time >= 100: # 每 100ms 傳送一次
+            send_player_state(client_socket, player, points)
+            send_obstacles_state(client_socket, obstacle_group, buff_group)
+            last_send_time = now
+
     #---------------------------- 畫面顯示 ----------------------------
     SCREEN.fill(BACKGROUND)
-    bg_group.draw(SCREEN)
-    obstacle_group.draw(SCREEN)
-    buff_group.draw(SCREEN)
+    if online_mode:
+        # 自己
+        draw_group_scaled(SCREEN, bg_group, scale, my_offset)
+        draw_group_scaled(SCREEN, obstacle_group, scale, my_offset)
+        draw_group_scaled(SCREEN, buff_group, scale, my_offset)
+        draw_group_scaled(SCREEN, player_group, scale, my_offset)
+        # 對手
+        draw_opponent_obstacle(opponent_obstacle, scale, opp_offset)
+        draw_opponent(opponent_player, scale, opp_offset)
+
+    else:
+        bg_group.draw(SCREEN)
+        obstacle_group.draw(SCREEN)
+        buff_group.draw(SCREEN)
+        player_group.draw(SCREEN)
 
     # player v.s obstacle
     hits = pygame.sprite.spritecollide(player, obstacle_group, False)
@@ -370,6 +704,20 @@ while running:
         SCREEN.blit(HIDE, (player.X_POS, player.Y_POS))
 
     if player.lives == 0:
+        if online_mode and not game_over:
+            if not die:
+                die = True
+                data = {
+                    "type": "GAME_OVER",
+                    "score": points
+                }
+                client_socket.sendall(json.dumps(data).encode() + b"\n")
+
+                player.kill()
+                obstacle_group.empty()
+                buff_group.empty()
+            continue
+
         show_finish = True
         
     # player v.s buff
@@ -378,10 +726,15 @@ while running:
         game_speed += buff.get_effect()
         game_speed = max(4, min(game_speed, 19))
     
-
-    player_group.draw(SCREEN)
     draw_lives(SCREEN, player.lives, LIVE, 750, 15)
     draw_text(SCREEN, f"points: {points}", 25, 830, 15)
+    if online_mode and not game_over:
+        if die:
+            my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
+            draw_eliminated_overlay(SCREEN, my_rect)
+        elif opp_die:
+            opp_rect = pygame.Rect(0, HEIGHT // 2, WIDTH, HEIGHT // 2)
+            draw_eliminated_overlay(SCREEN, opp_rect)
     pygame.display.update()
 
 pygame.quit()
