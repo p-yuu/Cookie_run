@@ -56,6 +56,8 @@ def handle_client(conn, addr):        #處裡用戶
 
                     # ---- game over ----
                     if payload.get("type") == "GAME_OVER":
+                        if conn in final_scores.get(room_id, {}):
+                            continue
                         final_scores.setdefault(room_id, {})[conn] = payload["score"]
 
                         # 兩人都結束 → 判斷勝負
@@ -63,18 +65,24 @@ def handle_client(conn, addr):        #處裡用戶
                             (c1, s1), (c2, s2) = final_scores[room_id].items()
 
                             if s1 > s2:
-                                c1.sendall(b"WIN\n")
-                                c2.sendall(b"LOSE\n")
+                                result1 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s1, "OPP_SCORE": s2}
+                                result2 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s2, "OPP_SCORE": s1}
                             elif s1 < s2:
-                                c1.sendall(b"LOSE\n")
-                                c2.sendall(b"WIN\n")
+                                result1 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s1, "OPP_SCORE": s2}
+                                result2 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s2, "OPP_SCORE": s1}
                             else:
-                                c1.sendall(b"DRAW\n")
-                                c2.sendall(b"DRAW\n")
+                                result1 = {"type": "GAME_RESULT", "RESULT": "DRAW", "MY_SCORE": s1, "OPP_SCORE": s2}
+                                result2 = {"type": "GAME_RESULT", "RESULT": "DRAW", "MY_SCORE": s2, "OPP_SCORE": s1}
+
+                            c1.sendall((json.dumps(result1) + "\n").encode())
+                            c2.sendall((json.dumps(result2) + "\n").encode())
+
+                            del final_scores[room_id]
+                            del rooms[room_id]
 
                     # ---- relay normal state ----
                     else:
-                        relay(conn, room_id, data)
+                        relay(conn, room_id, msg.encode())
 
     finally: # 不管有沒有錯都會執行
         print(f"[DISCONNECT] {addr}")

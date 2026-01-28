@@ -251,8 +251,9 @@ class Background(pygame.sprite.Sprite):
 def reset_game():
     global player_group, bg_group, obstacle_group, buff_group
     global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
-    global die, game_over, game_state, opponent_player, opponent_obstacle, opponent_points
-    global last_send_time, countdown_start_time, game_started, no_opponent, opp_die
+    global opponent_player, game_started, round_finished, waiting_result, game_result
+    global no_opponent, opp_die, opponent_obstacle, opponent_points, my_score, opp_score
+    global last_send_time, countdown_start_time, finish_time
     
     # ------- 重建玩家和背景 -------
     player_group = pygame.sprite.Group()
@@ -278,12 +279,14 @@ def reset_game():
     buff_count = 0
 
     # 雙人 PK 設定
-    opp_die = False           # 對手死了我沒死
-    die = False               # 我死了對手沒死
+    round_finished = False    # 本地端結束
+    waiting_result = False    # 等待server的遊戲結果
+    game_result = None        # WIN / LOSE / DRAW
     game_started = False
-    game_over = False         # 雙方都死了，遊戲結束
-    game_state = None         # 勝負
     no_opponent = False       # 沒有配對到對手
+    opp_die = False           # 對手死亡
+    my_score = None
+    opp_score = None
 
     # 創建影子角色
     opponent_player = None
@@ -293,6 +296,7 @@ def reset_game():
     # 計時
     last_send_time = 0          # 傳送資料
     countdown_start_time = None # 倒數計時
+    finish_time = None          # 本地端結束遊戲時間
 
     return player
 
@@ -329,11 +333,9 @@ def draw_start_menu():
 def draw_finish_menu():
     SCREEN.blit(MENU, (0,0))
     if online_mode:
-        draw_text(SCREEN, f'YOU {game_state}', 70, 650, 140, RED)
-        draw_text(SCREEN, str(points), 50, 650, 230, RED)
-        draw_text(SCREEN, 'V.S', 50, 650, 300, RED)
-        draw_text(SCREEN, str(opponent_points), 50, 650, 370, RED)
-        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 450, RED)
+        draw_text(SCREEN, f'YOU {game_result}', 70, 650, 170, RED)
+        draw_text(SCREEN, f'{my_score} V.S {opp_score}', 50, 650, 250, RED)
+        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 330, RED)
     else:
         draw_text(SCREEN, 'GAME OVER', 70, 650, 170, RED)
         draw_text(SCREEN, f'Final Score: {points}', 60, 660, 240, RED)
@@ -414,7 +416,7 @@ def reset_network_state():
 
 def listen_server(sock):
     global opponent_player, opponent_obstacle, online_mode, countdown_start_time
-    global game_state, game_over, game_started, no_opponent, opp_die
+    global game_started, no_opponent, opp_die, game_result, waiting_result, my_score, opp_score
     buffer = ""
 
     while online_mode == True:
@@ -431,12 +433,14 @@ def listen_server(sock):
                     countdown_start_time = pygame.time.get_ticks()
                 if msg == "NO_OPPONENT":
                     no_opponent = True
-                elif msg == "WIN" or msg == "LOSE" or msg == "DRAW":
-                    game_over = True
-                    game_state = msg
                 else:
                     payload = json.loads(msg)
-                    if payload["type"] == "PLAYER_STATE":
+                    if payload["type"] == "GAME_RESULT":
+                        waiting_result = False
+                        game_result = payload["RESULT"]
+                        my_score = payload["MY_SCORE"]
+                        opp_score = payload["OPP_SCORE"]
+                    elif payload["type"] == "PLAYER_STATE":
                         opponent_player = payload
                         if opponent_player["lives"] == 0:
                             opp_die = True
@@ -584,6 +588,18 @@ while running:
         show_init = True
         continue # 避免遊戲邏輯執行
 
+    if round_finished:
+        if waiting_result and opp_die and not game_result:
+            if pygame.time.get_ticks() - finish_time > 5000:
+                print("Both die but no result")
+                game_result = "DRAW"
+                waiting_result = False
+
+        if game_result:
+            show_finish = True
+        CLOCK.tick(30)
+        continue
+
     # 遊戲準備及倒數
     if not game_started:
         if no_opponent:
@@ -668,7 +684,7 @@ while running:
 
     #---------------------------- 發送狀態 ----------------------------
     now = pygame.time.get_ticks()
-    if online_mode and client_socket and not die and not game_over:
+    if online_mode and client_socket and not round_finished:
         if now - last_send_time >= 100: # 每 100ms 傳送一次
             send_player_state(client_socket, player, points)
             send_obstacles_state(client_socket, obstacle_group, buff_group)
@@ -703,22 +719,24 @@ while running:
     if player.hidden:
         SCREEN.blit(HIDE, (player.X_POS, player.Y_POS))
 
-    if player.lives == 0:
-        if online_mode and not game_over:
-            if not die:
-                die = True
-                data = {
-                    "type": "GAME_OVER",
-                    "score": points
-                }
-                client_socket.sendall(json.dumps(data).encode() + b"\n")
+    if player.lives == 0 and not round_finished:
+        round_finished = True
+        finish_time = pygame.time.get_ticks()
 
-                player.kill()
-                obstacle_group.empty()
-                buff_group.empty()
-            continue
+        if online_mode:
+            waiting_result = True
+            data = {
+                "type": "GAME_OVER",
+                "score": points
+            }
+            client_socket.sendall(json.dumps(data).encode() + b"\n")
 
-        show_finish = True
+            player.kill()
+            obstacle_group.empty()
+            buff_group.empty()
+        else:
+            game_result = "finish"
+        continue
         
     # player v.s buff
     hits = pygame.sprite.spritecollide(player, buff_group, True)
@@ -728,13 +746,13 @@ while running:
     
     draw_lives(SCREEN, player.lives, LIVE, 750, 15)
     draw_text(SCREEN, f"points: {points}", 25, 830, 15)
-    if online_mode and not game_over:
-        if die:
-            my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
-            draw_eliminated_overlay(SCREEN, my_rect)
-        elif opp_die:
-            opp_rect = pygame.Rect(0, HEIGHT // 2, WIDTH, HEIGHT // 2)
-            draw_eliminated_overlay(SCREEN, opp_rect)
+    # if online_mode and not game_over:
+    #     if die:
+    #         my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
+    #         draw_eliminated_overlay(SCREEN, my_rect)
+    #     elif opp_die:
+    #         opp_rect = pygame.Rect(0, HEIGHT // 2, WIDTH, HEIGHT // 2)
+    #         draw_eliminated_overlay(SCREEN, opp_rect)
     pygame.display.update()
 
 pygame.quit()
