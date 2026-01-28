@@ -89,8 +89,7 @@ class Player(pygame.sprite.Sprite):
                 self.is_slide = False
                 self.jump_vel = self.JUMP_VEL
                 self.jump_time = 2
-                self.rect.y = self.Y_POS
-                self.rect.x = self.X_POS
+                self.image = self.run_img[0]
             return # 強制中斷 update 函式，下面程式若有改動不會有影響(若用 if 就要調整 if 包含範圍)
 
         if self.is_jump:
@@ -141,7 +140,8 @@ class Player(pygame.sprite.Sprite):
     def hide(self):
         self.hidden = True
         self.hide_time = pygame.time.get_ticks() # 回傳遊戲開始後的毫秒數
-        self.rect.x = -100 #移到畫面外
+        self.rect.y = self.Y_POS
+        self.image = HIDE
 
 def draw_lives(SCREEN, lives, img, x, y):
     for i in range(lives):
@@ -368,14 +368,14 @@ while running:
 
     # player v.s obstacle
     hits = pygame.sprite.spritecollide(player, obstacle_group, False)
-    if hits:
+    if hits and not player.hidden:
         # pygame.draw.rect(SCREEN, (225, 0, 0), player.rect, 2) # 撞到描紅邊
         player.lives -= 1
         player.hide() #增加緩衝時間
         hide_obstacle()
 
-    if player.hidden:
-        SCREEN.blit(HIDE, (player.X_POS, player.Y_POS))
+    # if player.hidden:
+    #     SCREEN.blit(HIDE, (player.X_POS, player.Y_POS))
 
     if player.lives == 0:
         show_finish = True

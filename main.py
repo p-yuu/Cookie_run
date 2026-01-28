@@ -153,7 +153,8 @@ class Player(pygame.sprite.Sprite):
     def hide(self):
         self.hidden = True
         self.hide_time = pygame.time.get_ticks() # 回傳遊戲開始後的毫秒數
-        self.rect.x = -100 #移到畫面外
+        self.rect.y = self.Y_POS
+        self.image = HIDE
 
 def draw_lives(SCREEN, lives, img, x, y):
     for i in range(lives):
@@ -335,7 +336,7 @@ def draw_finish_menu():
     if online_mode:
         draw_text(SCREEN, f'YOU {game_result}', 70, 650, 170, RED)
         draw_text(SCREEN, f'{my_score} V.S {opp_score}', 50, 650, 250, RED)
-        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 330, RED)
+        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 320, RED)
     else:
         draw_text(SCREEN, 'GAME OVER', 70, 650, 170, RED)
         draw_text(SCREEN, f'Final Score: {points}', 60, 660, 240, RED)
@@ -353,8 +354,8 @@ def draw_finish_menu():
                 return False   
 
 def draw_eliminated_overlay(SCREEN, rect):
-    overlay = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA) # 使圖形可以半透明
-    overlay.fill((0,0,0,150))
+    overlay = pygame.Surface((rect.width, rect.height))
+    overlay.fill((108,125,128))
     SCREEN.blit(overlay, rect.topleft)
 
     draw_text(SCREEN, "ELIMINATED", 60, rect.centerx, rect.centery, RED)
@@ -465,6 +466,7 @@ def send_player_state(sock, player, points):
         "y": player.rect.y,
         "is_jump": player.is_jump,
         "is_slide": player.is_slide,
+        "hidden": player.hidden,
         "points": points,
         "lives": player.lives,
     }
@@ -505,10 +507,12 @@ def draw_opponent(state, scale, offset):
         img = JUMPING
     elif state.get("is_slide"):
         img = SLIDING[0]
+    elif state.get("hidden"):
+        img = HIDE
     else:
         img = RUNNING[0]
     img = get_scaled(img, scale)
-    x = int(state["x"] * scale + offset[0])
+    x = int(state["x"] + offset[0])
     y = int(state["y"] * scale + offset[1])
     opponent_points = state["points"]
 
@@ -529,7 +533,7 @@ def draw_opponent_obstacle(state, scale, offset):
             img = FLYING
 
         img = get_scaled(img, scale)
-        x = int(o["x"] * scale + offset[0])
+        x = int(o["x"] + offset[0])
         y = int(o["y"] * scale + offset[1])
 
         img = img.copy()
@@ -539,7 +543,7 @@ def draw_opponent_obstacle(state, scale, offset):
     for b in state["buffs"]:
         img = BUFF if b["effect"] > 0 else DEBUFF
         img = get_scaled(img, scale)
-        x = int(b["x"] * scale + offset[0])
+        x = int(b["x"] + offset[0])
         y = int(b["y"] * scale + offset[1])
 
         img = img.copy()
@@ -589,6 +593,10 @@ while running:
         continue # 避免遊戲邏輯執行
 
     if round_finished:
+        my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
+        draw_eliminated_overlay(SCREEN, my_rect)
+        pygame.display.update()
+
         if waiting_result and opp_die and not game_result:
             if pygame.time.get_ticks() - finish_time > 5000:
                 print("Both die but no result")
@@ -685,7 +693,7 @@ while running:
     #---------------------------- 發送狀態 ----------------------------
     now = pygame.time.get_ticks()
     if online_mode and client_socket and not round_finished:
-        if now - last_send_time >= 100: # 每 100ms 傳送一次
+        if now - last_send_time >= 50: # 每 100ms 傳送一次
             send_player_state(client_socket, player, points)
             send_obstacles_state(client_socket, obstacle_group, buff_group)
             last_send_time = now
@@ -710,14 +718,11 @@ while running:
 
     # player v.s obstacle
     hits = pygame.sprite.spritecollide(player, obstacle_group, False)
-    if hits:
+    if hits and not player.hidden:
         # pygame.draw.rect(SCREEN, (225, 0, 0), player.rect, 2) # 撞到描紅邊
         player.lives -= 1
         player.hide() #增加緩衝時間
         hide_obstacle()
-
-    if player.hidden:
-        SCREEN.blit(HIDE, (player.X_POS, player.Y_POS))
 
     if player.lives == 0 and not round_finished:
         round_finished = True
@@ -725,6 +730,8 @@ while running:
 
         if online_mode:
             waiting_result = True
+            send_player_state(client_socket, player, points)
+
             data = {
                 "type": "GAME_OVER",
                 "score": points
@@ -746,13 +753,9 @@ while running:
     
     draw_lives(SCREEN, player.lives, LIVE, 750, 15)
     draw_text(SCREEN, f"points: {points}", 25, 830, 15)
-    # if online_mode and not game_over:
-    #     if die:
-    #         my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
-    #         draw_eliminated_overlay(SCREEN, my_rect)
-    #     elif opp_die:
-    #         opp_rect = pygame.Rect(0, HEIGHT // 2, WIDTH, HEIGHT // 2)
-    #         draw_eliminated_overlay(SCREEN, opp_rect)
+    if online_mode and opp_die:
+        opp_rect = pygame.Rect(0, HEIGHT // 2, WIDTH, HEIGHT // 2)
+        draw_eliminated_overlay(SCREEN, opp_rect)
     pygame.display.update()
 
 pygame.quit()
