@@ -27,7 +27,7 @@ HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_DIE.
 LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_LIVES.PNG")).convert_alpha(), (30,30))
 CLOUD = pygame.transform.scale(pygame.image.load(os.path.join("image", "CLOUD.PNG")).convert_alpha(), (100,75))
 TRACK = pygame.transform.scale(pygame.image.load(os.path.join("image", "TRACK.PNG")).convert_alpha(), (WIDTH,HEIGHT))
-BG = pygame.transform.scale(pygame.image.load(os.path.join("image", "BG.PNG")).convert_alpha(), (WIDTH,HEIGHT))
+BG = pygame.transform.scale(pygame.image.load(os.path.join("image", "BG.PNG")).convert_alpha(), (WIDTH,321))
 SMALL_OBT = [pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT1-1.PNG")).convert_alpha(), (76,90)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT1-2.PNG")).convert_alpha(), (54,90)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT1-3.PNG")).convert_alpha(), (90,90))]
@@ -232,7 +232,7 @@ class Background(pygame.sprite.Sprite):
         else:
             self.rect.x -= game_speed - 3
         if self.rect.right <= 0:
-            self.rect.x += self.rect.width * 2
+            self.rect.x = round(self.rect.width * 3 - abs(self.rect.right))
 
 def draw_menu(mode):
     SCREEN.blit(MENU, (0,0))
@@ -265,10 +265,9 @@ def reset():
     player_group.add(player)
 
     bg_group = pygame.sprite.Group()
-    bg_group.add(Background(BG, 'bg'))
-    bg_group.add(Background(BG, 'bg', WIDTH))
-    bg_group.add(Background(TRACK, 'track'))
-    bg_group.add(Background(TRACK, 'track', WIDTH))
+    for i in range(4):
+        bg_group.add(Background(BG, 'bg', i * WIDTH))
+        bg_group.add(Background(TRACK, 'track', i * WIDTH))
 
     obstacle_group = pygame.sprite.Group()
     buff_group = pygame.sprite.Group()
@@ -282,7 +281,6 @@ def reset():
     buff_count = 0
     return player
     
-
 #遊戲迴圈
 show_init = True
 show_finish = False

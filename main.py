@@ -39,7 +39,7 @@ HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_DIE.
 LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_LIVES.PNG")).convert_alpha(), (30,30))
 CLOUD = pygame.transform.scale(pygame.image.load(os.path.join("image", "CLOUD.PNG")).convert_alpha(), (100,75))
 TRACK = pygame.transform.scale(pygame.image.load(os.path.join("image", "TRACK.PNG")).convert_alpha(), (WIDTH,HEIGHT))
-BG = pygame.transform.scale(pygame.image.load(os.path.join("image", "BG.PNG")).convert_alpha(), (WIDTH,HEIGHT))
+BG = pygame.transform.scale(pygame.image.load(os.path.join("image", "BG.PNG")).convert_alpha(), (WIDTH,321))
 SMALL_OBT = [pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT1-1.PNG")).convert_alpha(), (76,90)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT1-2.PNG")).convert_alpha(), (54,90)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT1-3.PNG")).convert_alpha(), (90,90))]
@@ -233,9 +233,10 @@ class Buff(pygame.sprite.Sprite):
 
 #background
 class Background(pygame.sprite.Sprite):
-    def __init__(self, img, mode, x_offset = 0):
+    def __init__(self, img, mode, x_offset = 0, scale = 1.0):
         pygame.sprite.Sprite.__init__(self)
-        self.image = img
+        self.image = img.copy() # 使用副本避免尺寸更改影響到未來
+        self.image = pygame.transform.scale(self.image, (int(self.image.get_width() * scale), int(self.image.get_height() * scale)))
         self.rect = self.image.get_rect()
         self.rect.x = x_offset
         self.rect.y = 0
@@ -247,7 +248,7 @@ class Background(pygame.sprite.Sprite):
         else:
             self.rect.x -= game_speed - 3
         if self.rect.right <= 0:
-            self.rect.x += self.rect.width * 2
+            self.rect.x = round(self.rect.width * 3 + self.rect.right)
 
 def reset_game():
     global player_group, bg_group, obstacle_group, buff_group
@@ -262,10 +263,9 @@ def reset_game():
     player_group.add(player)
 
     bg_group = pygame.sprite.Group()
-    bg_group.add(Background(BG, 'bg'))
-    bg_group.add(Background(BG, 'bg', WIDTH))
-    bg_group.add(Background(TRACK, 'track'))
-    bg_group.add(Background(TRACK, 'track', WIDTH))
+    for i in range(4):
+        bg_group.add(Background(BG, 'bg', i * WIDTH * scale, scale))
+        bg_group.add(Background(TRACK, 'track', i * WIDTH * scale, scale))
 
     obstacle_group = pygame.sprite.Group()
     buff_group = pygame.sprite.Group()
@@ -492,7 +492,7 @@ def get_scaled(img, scale): # 縮放圖片
 def draw_group_scaled(SCREEN, group, scale = 1.0, offset = (0,0)): # 繪製縮放過的圖片
     for sprite in group:
         img = get_scaled(sprite.image, scale)
-        x = int(sprite.rect.x * scale + offset[0])
+        x = int(sprite.rect.x + offset[0])
         y = int(sprite.rect.y * scale + offset[1])
         SCREEN.blit(img, (x,y))
 
@@ -561,7 +561,7 @@ online_mode = False
 
 my_offset = (0,0)
 opp_offset = (0,HEIGHT // 2)
-scale = 0.5
+scale = 1.0
 scale_cache = {}
 
 countdown_seconds = 3
@@ -580,6 +580,7 @@ while running:
                 show_init = True
                 continue
 
+        scale = 0.5 if online_mode else 1.0
         player = reset_game()
         show_init = False
     
@@ -702,7 +703,8 @@ while running:
     SCREEN.fill(BACKGROUND)
     if online_mode:
         # 自己
-        draw_group_scaled(SCREEN, bg_group, scale, my_offset)
+        # draw_group_scaled(SCREEN, bg_group, scale, my_offset)
+        bg_group.draw(SCREEN)
         draw_group_scaled(SCREEN, obstacle_group, scale, my_offset)
         draw_group_scaled(SCREEN, buff_group, scale, my_offset)
         draw_group_scaled(SCREEN, player_group, scale, my_offset)
