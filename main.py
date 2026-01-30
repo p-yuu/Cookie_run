@@ -238,7 +238,7 @@ class Background(pygame.sprite.Sprite):
         self.image = img.copy() # 使用副本避免尺寸更改影響到未來
         self.image = pygame.transform.scale(self.image, (int(self.image.get_width() * scale), int(self.image.get_height() * scale)))
         self.rect = self.image.get_rect()
-        self.rect.x = x_offset
+        self.rect.x = int(x_offset * scale)
         self.rect.y = 0
         self.mode = mode
     
@@ -248,14 +248,14 @@ class Background(pygame.sprite.Sprite):
         else:
             self.rect.x -= game_speed - 3
         if self.rect.right <= 0:
-            self.rect.x = round(self.rect.width * 3 + self.rect.right)
+            self.rect.x = round(self.rect.width * 3 + self.rect.right) # x 大於 0 的 track 有三塊
 
 def reset_game():
     global player_group, bg_group, obstacle_group, buff_group
     global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
     global opponent_player, game_started, round_finished, waiting_result, game_result
     global no_opponent, opp_die, opponent_obstacle, opponent_points, my_score, opp_score
-    global last_send_time, countdown_start_time, finish_time
+    global last_send_time, countdown_start_time, finish_time, opponent_bg
     
     # ------- 重建玩家和背景 -------
     player_group = pygame.sprite.Group()
@@ -264,8 +264,8 @@ def reset_game():
 
     bg_group = pygame.sprite.Group()
     for i in range(4):
-        bg_group.add(Background(BG, 'bg', i * WIDTH * scale, scale))
-        bg_group.add(Background(TRACK, 'track', i * WIDTH * scale, scale))
+        bg_group.add(Background(BG, 'bg', i * WIDTH, scale))
+        bg_group.add(Background(TRACK, 'track', i * WIDTH, scale))
 
     obstacle_group = pygame.sprite.Group()
     buff_group = pygame.sprite.Group()
@@ -292,6 +292,7 @@ def reset_game():
     # 創建影子角色
     opponent_player = None
     opponent_obstacle = None
+    opponent_bg = None
     opponent_points = 0
 
     # 計時
@@ -416,7 +417,7 @@ def reset_network_state():
         pass
 
 def listen_server(sock):
-    global opponent_player, opponent_obstacle, online_mode, countdown_start_time
+    global opponent_player, opponent_obstacle, online_mode, countdown_start_time, opponent_bg
     global game_started, no_opponent, opp_die, game_result, waiting_result, my_score, opp_score
     buffer = ""
 
@@ -447,6 +448,8 @@ def listen_server(sock):
                             opp_die = True
                     elif payload['type'] == "OBSTACLES_STATE":
                         opponent_obstacle = payload
+                    elif payload['type'] == "BACKGROUND_STATE":
+                        opponent_bg = payload
 
         except json.JSONDecodeError:   # 半包 / 黏包，正常，忽略
             continue
@@ -480,6 +483,18 @@ def send_obstacles_state(sock, obstacles, buff):
         "buffs": [{"x": b.rect.x, "y": b.rect.y, "effect": b.get_effect()} for b in buff]
     }
     message = json.dumps(data).encode() + b'\n'
+    sock.sendall(message)
+
+def send_background_state(sock, bg):
+    track_x = min(b.rect.x for b in bg if b.mode == 'track')
+    bg_x = min(b.rect.x for b in bg if b.mode == 'bg')
+        
+    data = {
+        "type": "BACKGROUND_STATE",
+        "track_x": track_x,
+        "bg_x": bg_x
+    }
+    message = json.dumps(data).encode() + b'\n' # dict 轉換成 JSON 再轉成 bytes
     sock.sendall(message)
 
 def get_scaled(img, scale): # 縮放圖片
@@ -550,6 +565,19 @@ def draw_opponent_obstacle(state, scale, offset):
         img.set_alpha(150)
         SCREEN.blit(img, (x, y))
 
+def draw_opponent_bg(state, scale, offset):
+    if not state:
+        return
+
+    track_base = int(state["track_x"])
+    bg_base = int(state["bg_x"])
+
+    track_img = get_scaled(TRACK, scale)
+    bg_img = get_scaled(BG, scale)
+
+    for i in range(4):
+        SCREEN.blit(track_img,(track_base + i * track_img.get_width() + offset[0], offset[1]))
+        SCREEN.blit(bg_img,(bg_base + i * bg_img.get_width() + offset[0], offset[1]))
 #--------------------------------------------------------------------------
 
 #遊戲迴圈
@@ -697,18 +725,19 @@ while running:
         if now - last_send_time >= 50: # 每 100ms 傳送一次
             send_player_state(client_socket, player, points)
             send_obstacles_state(client_socket, obstacle_group, buff_group)
+            send_background_state(client_socket, bg_group)
             last_send_time = now
 
     #---------------------------- 畫面顯示 ----------------------------
     SCREEN.fill(BACKGROUND)
     if online_mode:
         # 自己
-        # draw_group_scaled(SCREEN, bg_group, scale, my_offset)
         bg_group.draw(SCREEN)
         draw_group_scaled(SCREEN, obstacle_group, scale, my_offset)
         draw_group_scaled(SCREEN, buff_group, scale, my_offset)
         draw_group_scaled(SCREEN, player_group, scale, my_offset)
         # 對手
+        draw_opponent_bg(opponent_bg, scale, opp_offset)
         draw_opponent_obstacle(opponent_obstacle, scale, opp_offset)
         draw_opponent(opponent_player, scale, opp_offset)
 
