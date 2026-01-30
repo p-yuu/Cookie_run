@@ -9,6 +9,9 @@ import threading
 
 SERVER_IP = "127.0.0.1" # 要改
 SERVER_PORT = 5000
+PLAYER_HZ = 20
+OBSTACLE_HZ = 100
+BG_HZ = 5
 #---------------------------------------------------------------------------
 
 # 變數
@@ -442,14 +445,12 @@ def listen_server(sock):
                         game_result = payload["RESULT"]
                         my_score = payload["MY_SCORE"]
                         opp_score = payload["OPP_SCORE"]
-                    elif payload["type"] == "PLAYER_STATE":
-                        opponent_player = payload
-                        if opponent_player["lives"] == 0:
-                            opp_die = True
-                    elif payload['type'] == "OBSTACLES_STATE":
-                        opponent_obstacle = payload
-                    elif payload['type'] == "BACKGROUND_STATE":
-                        opponent_bg = payload
+                    elif payload["type"] == "EVENT":
+                        opp_die = True
+                    elif payload["type"] == "STATE":
+                        opponent_player = payload["player"]
+                        opponent_obstacle = payload["obstacles"]
+                        opponent_bg = payload["background"]
 
         except json.JSONDecodeError:   # 半包 / 黏包，正常，忽略
             continue
@@ -462,8 +463,8 @@ def listen_server(sock):
             print("[listen_server error]", e)
             continue
 
-def send_player_state(sock, player, points):
-    data = {
+def send_state(sock, player, obstacles, points, buff, bg):
+    player_state =  {
         "type": "PLAYER_STATE",
         "x": player.rect.x,
         "y": player.rect.y,
@@ -473,29 +474,29 @@ def send_player_state(sock, player, points):
         "points": points,
         "lives": player.lives,
     }
-    message = json.dumps(data).encode() + b'\n' # dict 轉換成 JSON 再轉成 bytes
-    sock.sendall(message)
 
-def send_obstacles_state(sock, obstacles, buff):
-    data = {
-        "type": "OBSTACLES_STATE",
-        "obstacles": [{"x": o.rect.x, "y": o.rect.y, "kind": o.kind, "index": o.index} for o in obstacles],
-        "buffs": [{"x": b.rect.x, "y": b.rect.y, "effect": b.get_effect()} for b in buff]
+    obstacles_state = {
+        "obstacles": [{"x": o.rect.x, "y": o.rect.y, "kind": o.kind, "index": o.index}for o in obstacles],
+        "buffs": [{"x": b.rect.x, "y": b.rect.y, "effect": b.get_effect()}for b in buff]
     }
-    message = json.dumps(data).encode() + b'\n'
-    sock.sendall(message)
 
-def send_background_state(sock, bg):
-    track_x = min(b.rect.x for b in bg if b.mode == 'track')
-    bg_x = min(b.rect.x for b in bg if b.mode == 'bg')
-        
-    data = {
-        "type": "BACKGROUND_STATE",
+    track_x = min(b.rect.x for b in bg_group if b.mode == "track")
+    bg_x = min(b.rect.x for b in bg_group if b.mode == "bg")
+
+    background_state = {
         "track_x": track_x,
         "bg_x": bg_x
     }
-    message = json.dumps(data).encode() + b'\n' # dict 轉換成 JSON 再轉成 bytes
-    sock.sendall(message)
+
+    data = {
+        "type": "STATE",
+        "time": pygame.time.get_ticks(),
+        "player": player_state,
+        "obstacles": obstacles_state,
+        "background": background_state
+    }
+
+    sock.sendall((json.dumps(data) + "\n").encode())
 
 def get_scaled(img, scale): # 縮放圖片
     key = (img, scale)
@@ -622,8 +623,15 @@ while running:
         continue # 避免遊戲邏輯執行
 
     if round_finished:
-        my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
-        draw_eliminated_overlay(SCREEN, my_rect)
+        SCREEN.fill(BACKGROUND)
+        if online_mode:
+            # 繼續繪製對手
+            draw_opponent_bg(opponent_bg, scale, opp_offset)
+            draw_opponent_obstacle(opponent_obstacle, scale, opp_offset)
+            draw_opponent(opponent_player, scale, opp_offset)
+            # 繪製 eliminated
+            my_rect = pygame.Rect(0, 0, WIDTH, HEIGHT // 2)
+            draw_eliminated_overlay(SCREEN, my_rect)
         pygame.display.update()
 
         if waiting_result and opp_die and not game_result:
@@ -723,9 +731,7 @@ while running:
     now = pygame.time.get_ticks()
     if online_mode and client_socket and not round_finished:
         if now - last_send_time >= 50: # 每 100ms 傳送一次
-            send_player_state(client_socket, player, points)
-            send_obstacles_state(client_socket, obstacle_group, buff_group)
-            send_background_state(client_socket, bg_group)
+            send_state(client_socket, player, obstacle_group, points, buff_group, bg_group)
             last_send_time = now
 
     #---------------------------- 畫面顯示 ----------------------------
@@ -761,7 +767,13 @@ while running:
 
         if online_mode:
             waiting_result = True
-            send_player_state(client_socket, player, points)
+            send_state(client_socket, player, obstacle_group, points, buff_group, bg_group)
+
+            die_event = {
+                "type": "EVENT",
+                "event": "PLAYER_DIE"
+            }
+            client_socket.sendall((json.dumps(die_event) + "\n").encode())
 
             data = {
                 "type": "GAME_OVER",

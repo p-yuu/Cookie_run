@@ -358,7 +358,7 @@ while running:
                 buff_count += 1
 
     #---------------------------- 畫面顯示 ----------------------------
-    SCREEN.fill(BACKGROUND)
+    SCREEN.fill(BACKGROUND) # 要先填滿背景色，不然上次畫的會無法被覆蓋
     bg_group.draw(SCREEN)
     obstacle_group.draw(SCREEN)
     buff_group.draw(SCREEN)
