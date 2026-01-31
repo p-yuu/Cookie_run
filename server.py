@@ -1,116 +1,179 @@
-import socket
-import threading
+import asyncio
 import json
-import time
 
-HOST = "0.0.0.0"    # 允許所有 IP 連線
+HOST = "0.0.0.0"
 PORT = 5000
 
-rooms = {}          # room_id -> [conn1, conn2]
-client_room = {}    # conn -> room_id
-final_scores = {}   # room_id -> {conn: score}  
+rooms: dict[str, list[asyncio.StreamWriter]] = {} # room_id -> [writer1, writer2]
+room_events: dict[str, asyncio.Event] = {} # room_id -> asyncio.Event (避免 busy wait)
+final_scores: dict[str, dict[asyncio.StreamWriter, int]] = {} # room_id -> {writer: score}
 
 
-def relay(sender, room_id, data):     # 傳輸資料
-    for c in rooms.get(room_id, []):
-        if c != sender:
-            c.sendall(data + b'\n')
+async def safe_write(writer: asyncio.StreamWriter, data: bytes):
+    # 避免對方斷線、關閉等error
+    try:
+        writer.write(data)
+        await writer.drain()
+        return True
+    except Exception:
+        return False
 
-def handle_client(conn, addr):        #處裡用戶
+
+async def relay(sender, room_id, data: bytes):
+    # 把資料轉發給房間內另一位玩家
+    for w in rooms.get(room_id, []).copy():
+        if w is sender:
+            continue
+        ok = await safe_write(w, data + b"\n")
+        if not ok:
+            print(f"[REMOVE] {w.get_extra_info('peername')} disconnected during relay")
+            rooms[room_id].remove(w)
+
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    addr = writer.get_extra_info("peername")
     room_id = None
-    buffer = ""
+    print(f"[CONNECT] {addr}")
 
     try:
         while True:
-            data = conn.recv(8192)    # 接收資料包 (一次最多傳遞 8192 bytes)
-            if not data:
-                print(f"[DISCONNECT] {addr} (client closed connection)")
+            line = await reader.readline()
+            if not line:
                 break
+            msg = line.decode().strip()
 
-            buffer += data.decode()       # 把 bytes 轉為 str
+            # ---------- JOIN ROOM ----------
+            if msg.startswith("ROOM"):
+                _, rid = msg.split(maxsplit=1)
 
-            while "\n" in buffer:
-                msg, buffer = buffer.split("\n", 1)
+                # 已經在房間就忽略
+                if room_id is not None:
+                    continue
 
-                # ---- join room ----
-                if msg.startswith("ROOM"):  # 若 client 輸入"ROOM 1234"，分離出 "1234" 作為房號
-                    _, room_id = msg.split()
-                    rooms.setdefault(room_id, []).append(conn) # 若沒有該房間則創建該房間
-                    client_room[conn] = room_id
-                    print(f"[ROOM] {addr} joined room {room_id}")
+                room_id = rid
+                rooms.setdefault(room_id, [])
+                room_events.setdefault(room_id, asyncio.Event())
 
-                    start_time = time.time()
-                    while len(rooms[room_id]) < 2:
-                        if time.time() - start_time > 15:
-                            print(f"[TIMEOUT] Room {room_id} only has 1 player")
-                            conn.sendall(b"NO_OPPONENT\n")
-                            break
-                        time.sleep(0.1)
+                # 防止同一個 writer 被加兩次
+                if writer not in rooms[room_id]:
+                    rooms[room_id].append(writer)
+                print(f"[ROOM] {addr} joined {room_id}")
 
-                    if len(rooms[room_id]) == 2:
-                        for c in rooms[room_id]:
-                            c.sendall(b"START\n")
+                # 第二人到齊 → 啟動
+                if len(rooms[room_id]) == 2:
+                    alive = []
+                    for w in rooms[room_id].copy():
+                        ok = await safe_write(w, b"START\n")
+                        print(f"[ROOM] {room_id} START sent to 2 players") ##
+                        if ok:
+                            alive.append(w)
+                        else:
+                            print(f"[REMOVE] {w.get_extra_info('peername')} disconnected before START")
+                    rooms[room_id] = alive
 
+                    if len(alive) < 2:
+                        for w in alive:
+                            await safe_write(w, b"NO_OPPONENT\n")
+                        rooms.pop(room_id, None)
+                        room_events.pop(room_id, None)
+                        room_id = None
+                        break
+
+                    room_events[room_id].set()
                 else:
-                    payload = json.loads(msg) # 解析 json
+                    try:
+                        await asyncio.wait_for(room_events[room_id].wait(), timeout=15) # 等待
+                    except asyncio.TimeoutError:
+                        await safe_write(writer, b"NO_OPPONENT\n")
+                        rooms[room_id].remove(writer)
+                        if not rooms[room_id]:
+                            rooms.pop(room_id, None)
+                            room_events.pop(room_id, None)
+                        room_id = None
+                        break
 
-                    # ---- game over ----
-                    if payload.get("type") == "GAME_OVER":
-                        if conn in final_scores.get(room_id, {}):
-                            continue
-                        final_scores.setdefault(room_id, {})[conn] = payload["score"]
+            # ---------- GAME DATA ----------
+            else:
+                try:
+                    payload = json.loads(msg)
+                except json.JSONDecodeError:
+                    if room_id:
+                        await relay(writer, room_id, msg.encode())
+                    continue
 
-                        # 兩人都結束 → 判斷勝負
-                        if len(final_scores[room_id]) == 2:
-                            (c1, s1), (c2, s2) = final_scores[room_id].items()
+                # ---------- GAME OVER ----------
+                if payload.get("type") == "GAME_OVER":
+                    final_scores.setdefault(room_id, {})
 
-                            if s1 > s2:
-                                result1 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s1, "OPP_SCORE": s2}
-                                result2 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s2, "OPP_SCORE": s1}
-                            elif s1 < s2:
-                                result1 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s1, "OPP_SCORE": s2}
-                                result2 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s2, "OPP_SCORE": s1}
-                            else:
-                                result1 = {"type": "GAME_RESULT", "RESULT": "DRAW", "MY_SCORE": s1, "OPP_SCORE": s2}
-                                result2 = {"type": "GAME_RESULT", "RESULT": "DRAW", "MY_SCORE": s2, "OPP_SCORE": s1}
+                    # 防止重複送
+                    if writer in final_scores[room_id]:
+                        continue
 
-                            c1.sendall((json.dumps(result1) + "\n").encode())
-                            c2.sendall((json.dumps(result2) + "\n").encode())
+                    final_scores[room_id][writer] = payload["score"]
 
-                            del final_scores[room_id]
-                            del rooms[room_id]
+                    # 兩人都結束 → 判定
+                    if len(final_scores[room_id]) == 2:
+                        (w1, s1), (w2, s2) = final_scores[room_id].items()
 
-                    # ---- relay normal state ----
-                    else:
-                        relay(conn, room_id, msg.encode())
+                        if s1 > s2:
+                            r1 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s1, "OPP_SCORE": s2}
+                            r2 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s2, "OPP_SCORE": s1}
+                        elif s1 < s2:
+                            r1 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s1, "OPP_SCORE": s2}
+                            r2 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s2, "OPP_SCORE": s1}
+                        else:
+                            r1 = r2 = {"type": "GAME_RESULT", "RESULT": "DRAW", "MY_SCORE": s1, "OPP_SCORE": s2}
 
-    finally: # 不管有沒有錯都會執行
+                        await safe_write(w1, (json.dumps(r1) + "\n").encode())
+                        await safe_write(w2, (json.dumps(r2) + "\n").encode())
+
+                        # 清理
+                        final_scores.pop(room_id, None)
+                        rooms.pop(room_id, None)
+                        room_events.pop(room_id, None)
+                        room_id = None
+                        break
+
+                # ---------- RELAY ----------
+                else:
+                    if room_id:
+                        await relay(writer, room_id, msg.encode())
+
+    except Exception as e:
+        print(f"[ERROR] {addr} {e}")
+
+    finally:
         print(f"[DISCONNECT] {addr}")
-        if room_id and conn in rooms.get(room_id, []): # 移除房間裡的 client
-            rooms[room_id].remove(conn)
-        conn.close()
 
+        # 通知對手
+        if room_id and room_id in rooms:
+            for w in rooms[room_id]:
+                if w is not writer:
+                    await safe_write(w, b'{"type":"OPPONENT_LEFT"}\n')
 
-# ---- main ----
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((HOST, PORT))
-server.listen()
-server.settimeout(1.0)  # 設定 accept 最多等 1 秒
+        # 清理資料
+        if room_id:
+            if room_id in rooms and writer in rooms[room_id]:
+                rooms[room_id].remove(writer)
+            if room_id in rooms and not rooms[room_id]:
+                rooms.pop(room_id, None)
+                room_events.pop(room_id, None)
+            if room_id in final_scores:
+                final_scores[room_id].pop(writer, None)
 
-print("Server started")
-
-try:
-    while True: # 阻塞式等待連線，因此要獨立出來
+        writer.close()
         try:
-            conn, addr = server.accept() # 等待用戶端進入 (conn → client 的 socket 連線物件，addr → client 的 IP 和 port)
-            threading.Thread(
-                target = handle_client, # 要執行的函式
-                args = (conn, addr),    # 傳給 handle_client 的參數
-                daemon = True           # 主程式結束就會自動殺掉
-            ).start()                 # 啟動這個線程
-        except socket.timeout:
-            continue  # 1 秒沒有連線就回到 while True，這樣可以捕捉 Ctrl+C
-except KeyboardInterrupt:
-    print("\n[SERVER] KeyboardInterrupt, shutting down...")
-finally:
-    server.close()
+            await writer.wait_closed()
+        except ConnectionResetError:
+            pass
+
+
+async def main():
+    server = await asyncio.start_server(handle_client, HOST, PORT)
+    print(f"[SERVER] running on {HOST}:{PORT}")
+
+    async with server:
+        await server.serve_forever()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

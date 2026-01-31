@@ -257,8 +257,8 @@ def reset_game():
     global player_group, bg_group, obstacle_group, buff_group
     global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
     global opponent_player, game_started, round_finished, waiting_result, game_result
-    global no_opponent, opp_die, opponent_obstacle, opponent_points, my_score, opp_score
-    global last_send_time, countdown_start_time, finish_time, opponent_bg
+    global no_opponent, opp_die, opponent_obstacle, my_score, opp_score
+    global last_send_time, finish_time, opponent_bg
     
     # ------- 重建玩家和背景 -------
     player_group = pygame.sprite.Group()
@@ -296,11 +296,9 @@ def reset_game():
     opponent_player = None
     opponent_obstacle = None
     opponent_bg = None
-    opponent_points = 0
 
     # 計時
     last_send_time = 0          # 傳送資料
-    countdown_start_time = None # 倒數計時
     finish_time = None          # 本地端結束遊戲時間
 
     return player
@@ -445,6 +443,11 @@ def listen_server(sock):
                         game_result = payload["RESULT"]
                         my_score = payload["MY_SCORE"]
                         opp_score = payload["OPP_SCORE"]
+                    elif payload["type"] == "OPPONENT_LEFT":
+                        opp_die = True
+                        if not round_finished:
+                            game_result = "WIN"
+                            waiting_result = False
                     elif payload["type"] == "EVENT":
                         opp_die = True
                     elif payload["type"] == "STATE":
@@ -514,8 +517,6 @@ def draw_group_scaled(SCREEN, group, scale = 1.0, offset = (0,0)): # 繪製縮�
 
 # 繪製影子對手
 def draw_opponent(state, scale, offset):
-    global opponent_points
-
     if not state:
         return
     
@@ -530,7 +531,9 @@ def draw_opponent(state, scale, offset):
     img = get_scaled(img, scale)
     x = int(state["x"] + offset[0])
     y = int(state["y"] * scale + offset[1])
-    opponent_points = state["points"]
+
+    draw_lives(SCREEN, state["lives"], LIVE, 750, HEIGHT // 2 + 15)
+    draw_text(SCREEN, f"points: {state["points"]}", 25, 830, HEIGHT // 2 + 15)
 
     img = img.copy()
     img.set_alpha(150) # 透明度: 0 ~ 255
@@ -593,6 +596,7 @@ opp_offset = (0,HEIGHT // 2)
 scale = 1.0
 scale_cache = {}
 
+countdown_start_time = None
 countdown_seconds = 3
 
 while running:
@@ -608,6 +612,8 @@ while running:
                 reset_network_state()
                 show_init = True
                 continue
+        else:
+            countdown_start_time = None
 
         scale = 0.5 if online_mode else 1.0
         player = reset_game()
@@ -670,7 +676,6 @@ while running:
         else:
             draw_text(SCREEN, "GO!", 120, WIDTH // 2, HEIGHT // 2 - 50, YELLOW)
             game_started = True
-            countdown_start_time = None
         
         pygame.display.update()
         CLOCK.tick(30)
