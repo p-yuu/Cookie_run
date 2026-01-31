@@ -49,10 +49,16 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 if room_id is not None:
                     continue
 
-                room_id = rid
-                rooms.setdefault(room_id, [])
-                room_events.setdefault(room_id, asyncio.Event())
+                rooms.setdefault(rid, [])
+                room_events.setdefault(rid, asyncio.Event())
 
+                # 房間已滿 → 擋掉
+                if len(rooms[rid]) >= 2:
+                    await safe_write(writer, b"ROOM_FULL\n")
+                    print(f"[ROOM] {addr} tried to join {rid}, but room is full")
+                    continue
+
+                room_id = rid
                 # 防止同一個 writer 被加兩次
                 if writer not in rooms[room_id]:
                     rooms[room_id].append(writer)

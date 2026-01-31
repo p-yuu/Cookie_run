@@ -7,7 +7,7 @@ import json
 import socket
 import threading
 
-SERVER_IP = "127.0.0.1" # 要改
+SERVER_IP = "192.168.100.104" # 要改
 SERVER_PORT = 5000
 PLAYER_HZ = 20
 OBSTACLE_HZ = 100
@@ -258,7 +258,7 @@ def reset_game():
     global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
     global opponent_player, game_started, round_finished, waiting_result, game_result
     global no_opponent, opp_die, opponent_obstacle, my_score, opp_score
-    global last_send_time, finish_time, opponent_bg
+    global last_send_time, finish_time, opponent_bg, room_full
     
     # ------- 重建玩家和背景 -------
     player_group = pygame.sprite.Group()
@@ -283,6 +283,7 @@ def reset_game():
     buff_count = 0
 
     # 雙人 PK 設定
+    room_full = False         # 該房間已有兩人無法使用
     round_finished = False    # 本地端結束
     waiting_result = False    # 等待server的遊戲結果
     game_result = None        # WIN / LOSE / DRAW
@@ -419,7 +420,7 @@ def reset_network_state():
 
 def listen_server(sock):
     global opponent_player, opponent_obstacle, online_mode, countdown_start_time, opponent_bg
-    global game_started, no_opponent, opp_die, game_result, waiting_result, my_score, opp_score
+    global game_started, no_opponent, opp_die, game_result, waiting_result, my_score, opp_score, room_full
     buffer = ""
 
     while online_mode == True:
@@ -450,6 +451,8 @@ def listen_server(sock):
                             waiting_result = False
                     elif payload["type"] == "EVENT":
                         opp_die = True
+                    elif payload["type"] == "ROOM_FULL":
+                        room_full = True
                     elif payload["type"] == "STATE":
                         opponent_player = payload["player"]
                         opponent_obstacle = payload["obstacles"]
@@ -609,6 +612,11 @@ while running:
         if online_mode:
             success = init_network()
             if not success:
+                reset_network_state()
+                show_init = True
+                continue
+            if room_full:
+                print("room_full") ##
                 reset_network_state()
                 show_init = True
                 continue
