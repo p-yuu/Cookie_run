@@ -7,7 +7,7 @@ import json
 import socket
 import threading
 
-SERVER_IP = "192.168.100.104" # 要改
+SERVER_IP = "192.168.0.104" # 要改 192.168.0.104
 SERVER_PORT = 5000
 PLAYER_HZ = 20
 OBSTACLE_HZ = 100
@@ -16,6 +16,7 @@ BG_HZ = 5
 
 # 變數
 FPS = 60
+GAME_SPEED = 10
 BACKGROUND = (191,221,226)
 YELLOW = (222,130,9)
 LIGHT_YELLOW = (247,228,170)
@@ -33,13 +34,13 @@ pygame.display.set_caption("Cookie Run")
 CLOCK = pygame.time.Clock()
 
 # image
-RUNNING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_RUN1.PNG")).convert_alpha(), (85,110)),
-           pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_RUN2.PNG")).convert_alpha(), (85,110))]
-JUMPING = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_JUMP.PNG")).convert_alpha(), (85,110))
-SLIDING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_SLIDE1.PNG")).convert_alpha(), (86,82)),
-           pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_SLIDE2.PNG")).convert_alpha(), (86,82))]
-HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_DIE.PNG")).convert_alpha(), (85,110))
-LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_LIVES.PNG")).convert_alpha(), (30,30))
+RUNNING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN1.PNG")).convert_alpha(), (85,110)),
+           pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN2.PNG")).convert_alpha(), (85,110))]
+JUMPING = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_JUMP.PNG")).convert_alpha(), (85,110))
+SLIDING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE1.PNG")).convert_alpha(), (86,82)),
+           pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE2.PNG")).convert_alpha(), (86,82))]
+HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_DIE.PNG")).convert_alpha(), (85,110))
+LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_LIVES.PNG")).convert_alpha(), (30,30))
 CLOUD = pygame.transform.scale(pygame.image.load(os.path.join("image", "CLOUD.PNG")).convert_alpha(), (100,75))
 TRACK = pygame.transform.scale(pygame.image.load(os.path.join("image", "TRACK.PNG")).convert_alpha(), (WIDTH,HEIGHT))
 BG = pygame.transform.scale(pygame.image.load(os.path.join("image", "BG.PNG")).convert_alpha(), (WIDTH,321))
@@ -224,7 +225,7 @@ class Buff(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect()
         self.rect.x = WIDTH
-        self.rect.y = random.choice([240,355])
+        self.rect.y = random.choice([150,355])
     
     def update(self):
         self.rect.x -= game_speed
@@ -257,8 +258,8 @@ def reset_game():
     global player_group, bg_group, obstacle_group, buff_group
     global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
     global opponent_player, game_started, round_finished, waiting_result, game_result
-    global no_opponent, opp_die, opponent_obstacle, my_score, opp_score
-    global last_send_time, finish_time, opponent_bg, room_full
+    global no_opponent, opp_die, opponent_obstacle, my_score, opp_score, room_full
+    global last_send_time, finish_time, countdown_start_time, opponent_bg
     
     # ------- 重建玩家和背景 -------
     player_group = pygame.sprite.Group()
@@ -275,7 +276,7 @@ def reset_game():
 
     # ---------- 變數重置 ----------
     # 基本設定
-    game_speed = 10
+    game_speed = GAME_SPEED
     distance = 0
     points = 0
     obstacle_hidden = False
@@ -283,7 +284,7 @@ def reset_game():
     buff_count = 0
 
     # 雙人 PK 設定
-    room_full = False         # 該房間已有兩人無法使用
+    room_full = False         # 房間已有兩個人
     round_finished = False    # 本地端結束
     waiting_result = False    # 等待server的遊戲結果
     game_result = None        # WIN / LOSE / DRAW
@@ -300,6 +301,7 @@ def reset_game():
 
     # 計時
     last_send_time = 0          # 傳送資料
+    countdown_start_time = None
     finish_time = None          # 本地端結束遊戲時間
 
     return player
@@ -308,7 +310,7 @@ def draw_start_menu():
     global online_mode
 
     SCREEN.blit(MENU, (0,0))
-    draw_text(SCREEN, 'DOCK DOCK DOCK !!', 60, 670, 170, YELLOW)
+    draw_text(SCREEN, 'DUCK DUCK DUCK !!', 60, 670, 170, YELLOW)
 
     single_rect = pygame.Rect(550, 265, 200, 50)
     multi_rect = pygame.Rect(550, 330, 200, 50)
@@ -316,6 +318,8 @@ def draw_start_menu():
     pygame.draw.rect(SCREEN, LIGHT_YELLOW, multi_rect)
     draw_text(SCREEN, 'Single Plyer', 50, 650, 260, YELLOW)
     draw_text(SCREEN, 'Battle', 50, 650, 330, YELLOW)
+    if room_full:
+        draw_text(SCREEN, 'The room is full', 35, 650, 385, RED)
 
     pygame.display.update()
     waiting = True
@@ -339,11 +343,11 @@ def draw_finish_menu():
     if online_mode:
         draw_text(SCREEN, f'YOU {game_result}', 70, 650, 170, RED)
         draw_text(SCREEN, f'{my_score} V.S {opp_score}', 50, 650, 250, RED)
-        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 320, RED)
+        draw_text(SCREEN, 'press ENTER to restart the game', 35, 670, 320, RED)
     else:
         draw_text(SCREEN, 'GAME OVER', 70, 650, 170, RED)
         draw_text(SCREEN, f'Final Score: {points}', 60, 660, 240, RED)
-        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 320, RED)
+        draw_text(SCREEN, 'press ENTER to restart the game', 35, 670, 320, RED)
     pygame.display.update()
     waiting = True
     while waiting:
@@ -353,8 +357,9 @@ def draw_finish_menu():
                 pygame.quit()
                 return True
             elif event.type == pygame.KEYUP:
-                waiting = False
-                return False   
+                if event.key == pygame.K_RETURN:
+                    waiting = False
+                    return False   
 
 def draw_eliminated_overlay(SCREEN, rect):
     overlay = pygame.Surface((rect.width, rect.height))
@@ -402,6 +407,12 @@ def init_network():
             daemon=True              # 定義此thread為背景執行緒 (主程式結束自動結束)
         ).start()                    # 啟動 thread
 
+        threading.Thread(
+            target=ping_server,
+            args=(client_socket,),
+            daemon=True
+        ).start()
+
         online_mode = True
         print("online mode")
         return True
@@ -411,12 +422,15 @@ def init_network():
         return False
 
 def reset_network_state():
-    global game_started, online_mode, client_socket, opponent_state
+    global game_started, online_mode, client_socket, opponent_state, listen_thread, ping_thread
     game_started = False
     try:
-        client_socket.close()
+        if client_socket:
+            client_socket.close()
     except:
         pass
+    client_socket = None
+    online_mode = False
 
 def listen_server(sock):
     global opponent_player, opponent_obstacle, online_mode, countdown_start_time, opponent_bg
@@ -437,6 +451,9 @@ def listen_server(sock):
                     countdown_start_time = pygame.time.get_ticks()
                 if msg == "NO_OPPONENT":
                     no_opponent = True
+                if msg == "ROOM_FULL":
+                    room_full = True
+                    print("Room is full") ##
                 else:
                     payload = json.loads(msg)
                     if payload["type"] == "GAME_RESULT":
@@ -451,8 +468,6 @@ def listen_server(sock):
                             waiting_result = False
                     elif payload["type"] == "EVENT":
                         opp_die = True
-                    elif payload["type"] == "ROOM_FULL":
-                        room_full = True
                     elif payload["type"] == "STATE":
                         opponent_player = payload["player"]
                         opponent_obstacle = payload["obstacles"]
@@ -468,6 +483,16 @@ def listen_server(sock):
         except Exception as e:
             print("[listen_server error]", e)
             continue
+
+def ping_server(sock): # 連線判斷 (心跳)
+    while online_mode:
+        try:
+            ping = {"type": "PING"}
+            sock.sendall((json.dumps(ping) + "\n").encode())
+        except Exception as e:
+            print("[PING ERROR]", e)
+            break
+        pygame.time.wait(5000)  # 每 5 秒送一次
 
 def send_state(sock, player, obstacles, points, buff, bg):
     player_state =  {
@@ -536,7 +561,7 @@ def draw_opponent(state, scale, offset):
     y = int(state["y"] * scale + offset[1])
 
     draw_lives(SCREEN, state["lives"], LIVE, 750, HEIGHT // 2 + 15)
-    draw_text(SCREEN, f"points: {state["points"]}", 25, 830, HEIGHT // 2 + 15)
+    draw_text(SCREEN, f"points: {state['points']}", 25, 830, HEIGHT // 2 + 15)
 
     img = img.copy()
     img.set_alpha(150) # 透明度: 0 ~ 255
@@ -593,6 +618,7 @@ show_finish = False
 running = True
 
 online_mode = False
+room_full = False
 
 my_offset = (0,0)
 opp_offset = (0,HEIGHT // 2)
@@ -609,22 +635,16 @@ while running:
         if close:
             break
 
+        scale = 0.5 if online_mode else 1.0
+        player = reset_game()
+
         if online_mode:
             success = init_network()
             if not success:
                 reset_network_state()
                 show_init = True
                 continue
-            if room_full:
-                print("room_full") ##
-                reset_network_state()
-                show_init = True
-                continue
-        else:
-            countdown_start_time = None
 
-        scale = 0.5 if online_mode else 1.0
-        player = reset_game()
         show_init = False
     
     if show_finish:
@@ -634,6 +654,7 @@ while running:
         reset_network_state()
         show_finish = False
         show_init = True
+        room_full = False
         continue # 避免遊戲邏輯執行
 
     if round_finished:
@@ -661,6 +682,12 @@ while running:
 
     # 遊戲準備及倒數
     if not game_started:
+        if room_full:
+            reset_network_state()
+            show_init = True
+            countdown_start_time = None
+            continue
+
         if no_opponent:
             print("no opponent found") ##
             reset_network_state()
@@ -770,6 +797,7 @@ while running:
     hits = pygame.sprite.spritecollide(player, obstacle_group, False)
     if hits and not player.hidden:
         # pygame.draw.rect(SCREEN, (225, 0, 0), player.rect, 2) # 撞到描紅邊
+        game_speed = GAME_SPEED
         player.lives -= 1
         player.hide() #增加緩衝時間
         hide_obstacle()
@@ -809,9 +837,12 @@ while running:
     
     draw_lives(SCREEN, player.lives, LIVE, 750, 15)
     draw_text(SCREEN, f"points: {points}", 25, 830, 15)
-    if online_mode and opp_die:
-        opp_rect = pygame.Rect(0, HEIGHT // 2, WIDTH, HEIGHT // 2)
-        draw_eliminated_overlay(SCREEN, opp_rect)
+    if online_mode:
+        draw_text(SCREEN, "YOU", 30, 30, 10)
+        draw_text(SCREEN, "OPPONENT", 30, 60, opp_offset[1] + 10)
+        if opp_die:
+            opp_rect = pygame.Rect(0, opp_offset[1], WIDTH, opp_offset[1])
+            draw_eliminated_overlay(SCREEN, opp_rect)
     pygame.display.update()
 
 pygame.quit()

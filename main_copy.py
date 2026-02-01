@@ -3,6 +3,7 @@ import os
 import random
 
 FPS = 60
+GAME_SPEED = 10
 BACKGROUND = (191,221,226)
 YELLOW = (222,130,9)
 RED = (200,74,51)
@@ -18,13 +19,13 @@ pygame.display.set_caption("Cookie Run")
 CLOCK = pygame.time.Clock()
 
 #image
-RUNNING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_RUN1.PNG")).convert_alpha(), (85,110)),
-           pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_RUN2.PNG")).convert_alpha(), (85,110))]
-JUMPING = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_JUMP.PNG")).convert_alpha(), (85,110))
-SLIDING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_SLIDE1.PNG")).convert_alpha(), (86,82)),
-           pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_SLIDE2.PNG")).convert_alpha(), (86,82))]
-HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_DIE.PNG")).convert_alpha(), (85,110))
-LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DOCK_LIVES.PNG")).convert_alpha(), (30,30))
+RUNNING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN1.PNG")).convert_alpha(), (85,110)),
+           pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN2.PNG")).convert_alpha(), (85,110))]
+JUMPING = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_JUMP.PNG")).convert_alpha(), (85,110))
+SLIDING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE1.PNG")).convert_alpha(), (86,82)),
+           pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE2.PNG")).convert_alpha(), (86,82))]
+HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_DIE.PNG")).convert_alpha(), (85,110))
+LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_LIVES.PNG")).convert_alpha(), (30,30))
 CLOUD = pygame.transform.scale(pygame.image.load(os.path.join("image", "CLOUD.PNG")).convert_alpha(), (100,75))
 TRACK = pygame.transform.scale(pygame.image.load(os.path.join("image", "TRACK.PNG")).convert_alpha(), (WIDTH,HEIGHT))
 BG = pygame.transform.scale(pygame.image.load(os.path.join("image", "BG.PNG")).convert_alpha(), (WIDTH,321))
@@ -206,7 +207,7 @@ class Buff(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect()
         self.rect.x = WIDTH
-        self.rect.y = random.choice([240,355])
+        self.rect.y = random.choice([150,355])
     
     def update(self):
         self.rect.x -= game_speed
@@ -232,18 +233,18 @@ class Background(pygame.sprite.Sprite):
         else:
             self.rect.x -= game_speed - 3
         if self.rect.right <= 0:
-            self.rect.x = round(self.rect.width * 3 - abs(self.rect.right))
+            self.rect.x = round(self.rect.width - abs(self.rect.right))
 
 def draw_menu(mode):
     SCREEN.blit(MENU, (0,0))
     if mode == 'init':
         draw_text(SCREEN, 'DOCK DOCK DOCK !!', 60, 670, 170, YELLOW)
-        draw_text(SCREEN, 'press any key to', 50, 650, 240, YELLOW)
+        draw_text(SCREEN, 'press ENTER to', 50, 650, 240, YELLOW)
         draw_text(SCREEN, 'start the game', 50, 650, 290, YELLOW)
     else:
         draw_text(SCREEN, 'GAME OVER', 70, 650, 170, RED)
         draw_text(SCREEN, f'Final Score: {points}', 60, 660, 240, RED)
-        draw_text(SCREEN, 'press any key to restart the game', 35, 670, 320, RED)
+        draw_text(SCREEN, 'press ENTER to restart the game', 35, 670, 320, RED)
     pygame.display.update()
     waiting = True
     while waiting:
@@ -253,8 +254,9 @@ def draw_menu(mode):
                 pygame.quit()
                 return True
             elif event.type == pygame.KEYUP:
-                waiting = False
-                return False    
+                if event.key == pygame.K_RETURN:
+                    waiting = False
+                    return False    
 
 def reset():
     global player_group, bg_group, obstacle_group, buff_group
@@ -265,7 +267,7 @@ def reset():
     player_group.add(player)
 
     bg_group = pygame.sprite.Group()
-    for i in range(4):
+    for i in range(2):
         bg_group.add(Background(BG, 'bg', i * WIDTH))
         bg_group.add(Background(TRACK, 'track', i * WIDTH))
 
@@ -273,7 +275,7 @@ def reset():
     buff_group = pygame.sprite.Group()
 
     #global variables
-    game_speed = 10 # 4 ~ 19
+    game_speed = GAME_SPEED # 4 ~ 19
     distance = 0
     points = 0
     obstacle_hidden = False
@@ -368,6 +370,7 @@ while running:
     hits = pygame.sprite.spritecollide(player, obstacle_group, False)
     if hits and not player.hidden:
         # pygame.draw.rect(SCREEN, (225, 0, 0), player.rect, 2) # 撞到描紅邊
+        game_speed = GAME_SPEED
         player.lives -= 1
         player.hide() #增加緩衝時間
         hide_obstacle()
