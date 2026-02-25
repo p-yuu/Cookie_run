@@ -9,6 +9,8 @@ ROOM_TTL = 30          # 房間 30 秒沒活動就刪
 PING_TIMEOUT = 15      # client 超過 15 秒沒 ping 視為斷線
 DEBUG_INTERVAL = 5     # debug 每 5 秒印一次
 DEBUG = True
+PING_MIN_INTERVAL = 1.0
+last_ping_time = {}
 
 rooms = {} # room_id -> [writer1, writer2]
 room_events = {} # room_id -> asyncio.Event (避免 busy wait)
@@ -178,7 +180,13 @@ async def handle_client(reader, writer):
 
                 # ---------- HEARTBEAT ----------
                 if payload.get("type") == "PING":
-                    print("[PING]", addr) ##
+                    now = time.time()
+                    last = last_ping_time.get(writer, 0)
+                    if now - last < PING_MIN_INTERVAL:
+                        continue  # 忽略太密的 PING
+                    last_ping_time[writer] = now
+
+                    await safe_write(writer, b'{"type":"PONG"}\n')
                     continue
 
                 # ---------- GAME OVER ----------

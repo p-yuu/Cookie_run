@@ -7,7 +7,7 @@ import json
 import socket
 import threading
 
-SERVER_IP = "192.168.0.104" # 要改 192.168.0.104
+SERVER_IP = "10.11.242.222" # 要改 192.168.0.104
 SERVER_PORT = 5000
 PLAYER_HZ = 20
 OBSTACLE_HZ = 100
@@ -15,8 +15,6 @@ BG_HZ = 5
 #---------------------------------------------------------------------------
 
 # 變數
-FPS = 60
-GAME_SPEED = 10
 BACKGROUND = (191,221,226)
 YELLOW = (222,130,9)
 LIGHT_YELLOW = (247,228,170)
@@ -24,13 +22,15 @@ RED = (200,74,51)
 BLACK = (0,0,0)
 WHITE = (255,255,255)
 
+FPS = 60
+GAME_SPEED = 10
 WIDTH = 900
 HEIGHT = 500
 
 # pygame 初始化
 pygame.init()
 SCREEN = pygame.display.set_mode((WIDTH,HEIGHT))
-pygame.display.set_caption("Cookie Run")
+pygame.display.set_caption("Duck Run")
 CLOCK = pygame.time.Clock()
 
 # image
@@ -70,6 +70,7 @@ class Player(pygame.sprite.Sprite):
     Y_POS = 310
     Y_POS_SLIDE = 338
     JUMP_VEL = 16
+    ANIM_STEP = 10    # 多少幀一張
 
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -82,8 +83,6 @@ class Player(pygame.sprite.Sprite):
         self.is_slide = False
 
         self.step_idx = 0    #步驟索引
-        self.anim_step = 10  #多少幀一張圖
-
         self.jump_vel = self.JUMP_VEL
         self.jump_time = 2
         self.on_ground = True
@@ -105,8 +104,7 @@ class Player(pygame.sprite.Sprite):
                 self.is_slide = False
                 self.jump_vel = self.JUMP_VEL
                 self.jump_time = 2
-                self.rect.y = self.Y_POS
-                self.rect.x = self.X_POS
+                self.image = self.run_img[0]
             return # 強制中斷 update 函式，下面程式若有改動不會有影響(若用 if 就要調整 if 包含範圍)
 
         if self.is_jump:
@@ -116,12 +114,12 @@ class Player(pygame.sprite.Sprite):
         else:
             self.walk()
         
-        if self.step_idx >= self.anim_step * 2:
+        if self.step_idx >= self.ANIM_STEP * 2:
             self.step_idx = 0
 
     def walk(self):
         self.is_run = True
-        self.image = self.run_img[self.step_idx // self.anim_step] #共2n幀，每n幀換一張圖
+        self.image = self.run_img[self.step_idx // self.ANIM_STEP] #共2n幀，每n幀換一張圖
         self.rect = self.image.get_rect() #保證每張圖片都有自己的 rect 並更新位置
         self.rect.x = self.X_POS
         self.rect.y = self.Y_POS
@@ -148,7 +146,7 @@ class Player(pygame.sprite.Sprite):
 
     def slide(self):
         self.is_slide = True
-        self.image = self.slide_img[self.step_idx // self.anim_step]
+        self.image = self.slide_img[self.step_idx // self.ANIM_STEP]
         self.rect = self.image.get_rect() #保證每張圖片都有自己的 rect 並更新位置
         self.rect.x = self.X_POS
         self.rect.y = self.Y_POS_SLIDE
@@ -173,7 +171,6 @@ class Obstacle(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
 
         self.image = images
-        self.index = 0
         self.rect = self.image.get_rect()
         self.rect.x = WIDTH
         self.rect.y = y
@@ -758,13 +755,12 @@ while running:
                 buff_count = 0
             elif r == 2:
                 obstacle_group.add(Fly_OBT())
+                buff_count = 0
             elif r == 3:
-                buff = Buff("speed_up")
-                buff_group.add(buff)
+                buff_group.add(Buff("speed_up"))
                 buff_count += 1
             elif r == 4:
-                buff = Buff("speed_down")
-                buff_group.add(buff)
+                buff_group.add(Buff("speed_down"))
                 buff_count += 1
 
     #---------------------------- 發送狀態 ----------------------------

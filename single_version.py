@@ -3,8 +3,10 @@ import os
 import random
 
 BACKGROUND = (191,221,226)
+WHITE = (255,255,255)
 YELLOW = (222,130,9)
 RED = (200,74,51)
+GREEN = (0,255,0)
 BLACK = (0,0,0)
 
 FPS = 60
@@ -12,18 +14,17 @@ GAME_SPEED = 10
 WIDTH = 900
 HEIGHT = 500
 
-#遊戲初始化
 pygame.init()
-SCREEN = pygame.display.set_mode((WIDTH,HEIGHT))
-pygame.display.set_caption("Duck Run")
+SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Duck run")
 CLOCK = pygame.time.Clock()
 
-#image
+# image
 RUNNING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN1.PNG")).convert_alpha(), (85,110)),
-           pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN2.PNG")).convert_alpha(), (85,110))]
+       pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_RUN2.PNG")).convert_alpha(), (85,110))]
 JUMPING = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_JUMP.PNG")).convert_alpha(), (85,110))
 SLIDING = [pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE1.PNG")).convert_alpha(), (86,82)),
-           pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE2.PNG")).convert_alpha(), (86,82))]
+       pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_SLIDE2.PNG")).convert_alpha(), (86,82))]
 HIDE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_DIE.PNG")).convert_alpha(), (85,110))
 LIVE = pygame.transform.scale(pygame.image.load(os.path.join("image", "DUCK_LIVES.PNG")).convert_alpha(), (30,30))
 CLOUD = pygame.transform.scale(pygame.image.load(os.path.join("image", "CLOUD.PNG")).convert_alpha(), (100,75))
@@ -40,7 +41,7 @@ BUFF = pygame.transform.scale(pygame.image.load(os.path.join("image", "BUFF.PNG"
 DEBUFF = pygame.transform.scale(pygame.image.load(os.path.join("image", "DEBUFF.PNG")).convert_alpha(), (50,50))
 MENU = pygame.transform.scale(pygame.image.load(os.path.join("image", "FINISH.PNG")).convert_alpha(), (900,500))
 
-#text
+# text 
 def draw_text(surf, text, size, x, y, color = BLACK):
     font = pygame.font.Font('Caroni-Regular.otf', size)
     text_surface = font.render(text, True, color) #True: 文字反鋸齒
@@ -49,7 +50,7 @@ def draw_text(surf, text, size, x, y, color = BLACK):
     text_rect.top = y
     surf.blit(text_surface, text_rect)
 
-#player
+# player
 class Player(pygame.sprite.Sprite):
     X_POS = 80
     Y_POS = 310
@@ -74,7 +75,7 @@ class Player(pygame.sprite.Sprite):
 
         self.lives = 3
         self.hidden = False
-        self.hide_time = 0 #隱藏時間
+        self.hide_time = 0
 
         self.image = self.run_img[0]
         self.rect = self.image.get_rect()
@@ -90,8 +91,8 @@ class Player(pygame.sprite.Sprite):
                 self.jump_vel = self.JUMP_VEL
                 self.jump_time = 2
                 self.image = self.run_img[0]
-            return # 強制中斷 update 函式，下面程式若有改動不會有影響(若用 if 就要調整 if 包含範圍)
-
+            return # 強制中斷 update 函式
+        
         if self.is_jump:
             self.jump()
         elif self.is_slide:
@@ -136,7 +137,7 @@ class Player(pygame.sprite.Sprite):
         self.rect.x = self.X_POS
         self.rect.y = self.Y_POS_SLIDE
         self.step_idx += 1
-    
+
     def hide(self):
         self.hidden = True
         self.hide_time = pygame.time.get_ticks() # 回傳遊戲開始後的毫秒數
@@ -150,7 +151,7 @@ def draw_lives(SCREEN, lives, img, x, y):
         img_rect.y = y
         SCREEN.blit(img, img_rect)
 
-#obstacle
+# obstacle
 class Obstacle(pygame.sprite.Sprite):
     def __init__(self, images, y):
         pygame.sprite.Sprite.__init__(self)
@@ -190,7 +191,7 @@ def get_last_x(): #取得最右物件
         xs.append(s.rect.right)
     return max(xs) if xs else 0
 
-#buff
+# buff
 class Buff(pygame.sprite.Sprite):
     def __init__(self, kind):
         pygame.sprite.Sprite.__init__(self)
@@ -205,16 +206,16 @@ class Buff(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = WIDTH
         self.rect.y = random.choice([150,355])
-    
+
     def update(self):
         self.rect.x -= game_speed
         if self.rect.right <= 0:
             self.kill()
-    
+
     def get_effect(self):
         return self.effect
 
-#background
+# background
 class Background(pygame.sprite.Sprite):
     def __init__(self, img, mode, x_offset = 0):
         pygame.sprite.Sprite.__init__(self)
@@ -258,45 +259,42 @@ def draw_menu(mode):
 def reset():
     global player_group, bg_group, obstacle_group, buff_group
     global game_speed, distance, points, obstacle_hidden, obstacle_time, buff_count
-    #Group
+    
+    # group
     player_group = pygame.sprite.Group()
     player = Player()
     player_group.add(player)
-
+    obstacle_group = pygame.sprite.Group()
+    buff_group = pygame.sprite.Group()
     bg_group = pygame.sprite.Group()
     for i in range(2):
         bg_group.add(Background(BG, 'bg', i * WIDTH))
         bg_group.add(Background(TRACK, 'track', i * WIDTH))
 
-    obstacle_group = pygame.sprite.Group()
-    buff_group = pygame.sprite.Group()
-
     #global variables
-    game_speed = GAME_SPEED # 4 ~ 19
-    distance = 0
     points = 0
+    distance = 0
+    buff_count = 0
     obstacle_hidden = False
     obstacle_time = 0
-    buff_count = 0
+    game_speed = GAME_SPEED
     return player
-    
-#遊戲迴圈
+
 show_init = True
 show_finish = False
 first_start = True
 running = True
-
 while running:
     #------------------------ 開始 / 結束設定 -------------------------
     if show_init:
         if first_start:
-            close = draw_menu('init')
+            close = draw_menu("init")
             if close:
                 break
         show_init = False
         first_start = False
         player = reset()
-        
+    
     if show_finish:
         close = draw_menu('finish')
         if close: 
@@ -304,15 +302,14 @@ while running:
         show_finish = False
         show_init = True
         continue # 避免遊戲邏輯執行
-
-    # CLOCK.tick(FPS) # 一秒 FPS 幀 (FPS 次迴圈) 同時回傳上一幀教過的毫秒數
-    distance += game_speed * (CLOCK.tick(FPS) / 1000) # 一幀的秒數 * 速率 = 一幀的距離
+    
+    distance += game_speed * (CLOCK.tick(FPS) / 1000) 
     if distance >= 1:
         add = int(distance)
         points += add
-        distance -= add # 剩餘小數點留給下一幀
+        distance -= add
 
-    #---------------------------- 取得輸入 ----------------------------
+    # ---------- 取得輸入 ----------
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -325,17 +322,17 @@ while running:
             if event.key == pygame.K_DOWN:
                 player.is_slide = False
 
-    #---------------------------- 更新遊戲 ----------------------------
-    bg_group.update()
+    # ---------- 更新遊戲 ----------
+    player_group.update()
     obstacle_group.update()
     buff_group.update()
-    player_group.update() #執行 all_sprite 裡面每一個物件的 update() 函式
+    bg_group.update()
 
     # 障礙物生成
     if obstacle_hidden:
         if pygame.time.get_ticks() - obstacle_time > 1000:  
             obstacle_hidden = False
-
+    
     if not obstacle_hidden:
         if get_last_x() < WIDTH - random.randint(550,650):
             r = random.randint(0,5)
@@ -355,36 +352,33 @@ while running:
                 buff_group.add(Buff("speed_down"))
                 buff_count += 1
 
-    #---------------------------- 畫面顯示 ----------------------------
-    SCREEN.fill(BACKGROUND) # 要先填滿背景色，不然上次畫的會無法被覆蓋
+    # ---------- 畫面顯示 ----------
+    SCREEN.fill(BACKGROUND)
     bg_group.draw(SCREEN)
+    player_group.draw(SCREEN)
     obstacle_group.draw(SCREEN)
     buff_group.draw(SCREEN)
-    player_group.draw(SCREEN)
 
     # player v.s obstacle
     hits = pygame.sprite.spritecollide(player, obstacle_group, False)
     if hits and not player.hidden:
-        # pygame.draw.rect(SCREEN, (225, 0, 0), player.rect, 2) # 撞到描紅邊
         game_speed = GAME_SPEED
+        player.hide()
         player.lives -= 1
-        player.hide() #增加緩衝時間
         hide_obstacle()
 
-    # if player.hidden:
-    #     SCREEN.blit(HIDE, (player.X_POS, player.Y_POS))
-
     if player.lives == 0:
+        # running = False
         show_finish = True
-        
+
     # player v.s buff
     hits = pygame.sprite.spritecollide(player, buff_group, True)
     for buff in hits:
         game_speed += buff.get_effect()
         game_speed = max(4, min(game_speed, 19))
-    
-    draw_lives(SCREEN, player.lives, LIVE, 750, 15)
+
     draw_text(SCREEN, f"points: {points}", 25, 830, 15)
+    draw_lives(SCREEN, player.lives, LIVE, 750, 15)
     pygame.display.update()
 
 pygame.quit()
