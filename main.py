@@ -6,12 +6,12 @@ import random
 import json
 import socket
 import threading
+from queue import Queue, Empty
 
-SERVER_IP = "10.11.242.222" # 要改 192.168.0.104
+SERVER_IP = "10.41.87.222"
 SERVER_PORT = 5000
-PLAYER_HZ = 20
-OBSTACLE_HZ = 100
-BG_HZ = 5
+
+send_queue = None
 #---------------------------------------------------------------------------
 
 # 變數
@@ -50,7 +50,7 @@ SMALL_OBT = [pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT
 LARGE_OBT = [pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT2-1.PNG")).convert_alpha(), (82,145)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT2-2.PNG")).convert_alpha(), (125,145)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT2-3.PNG")).convert_alpha(), (73,145))]
-FLYING = pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT_FLY.PNG")).convert_alpha(), (100,50))
+FLYING = pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT_FLY.PNG")).convert_alpha(), (120,132))
 BUFF = pygame.transform.scale(pygame.image.load(os.path.join("image", "BUFF.PNG")).convert_alpha(), (50,50))
 DEBUFF = pygame.transform.scale(pygame.image.load(os.path.join("image", "DEBUFF.PNG")).convert_alpha(), (50,50))
 MENU = pygame.transform.scale(pygame.image.load(os.path.join("image", "FINISH.PNG")).convert_alpha(), (900,500))
@@ -95,6 +95,7 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = self.X_POS
         self.rect.y = self.Y_POS
+        self.hitbox = pygame.Rect(self.rect.x, self.rect.y, 64, 97)
 
     def update(self):
         if self.hidden:
@@ -116,7 +117,17 @@ class Player(pygame.sprite.Sprite):
         
         if self.step_idx >= self.ANIM_STEP * 2:
             self.step_idx = 0
+        
+        self.update_hitbox()
 
+    def update_hitbox(self):
+        if self.is_slide: 
+            self.hitbox = pygame.Rect(self.rect.x, self.rect.y, 86, 82)
+            self.hitbox.topleft = self.rect.topleft
+        else:
+            self.hitbox = pygame.Rect(self.rect.x, self.rect.y, 64, 97)
+            self.hitbox.midtop = self.rect.midtop
+        
     def walk(self):
         self.is_run = True
         self.image = self.run_img[self.step_idx // self.ANIM_STEP] #共2n幀，每n幀換一張圖
@@ -191,7 +202,7 @@ def Large_OBT():
     return Obstacle(LARGE_OBT[idx], 265, "large", idx)
 
 def Fly_OBT():
-    return Obstacle(FLYING, 270, "fly", 0)
+    return Obstacle(FLYING, 190, "fly", 0)
 
 def hide_obstacle(): # 隱藏障礙物
     global obstacle_hidden, obstacle_time # 取得全域變數並修改他，而非創建新的變數
@@ -388,7 +399,7 @@ def input_room():
                     room += e.unicode # 實際輸入的字元
 
 def init_network():
-    global client_socket, online_mode
+    global client_socket, online_mode, send_queue
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((SERVER_IP, SERVER_PORT))
@@ -396,30 +407,26 @@ def init_network():
         if not room:
             online_mode = False
             return False
-        client_socket.sendall(f"ROOM {room}\n".encode())
         
-        threading.Thread(            # 開一個背景分身 (可同時執行遊戲跟接收)
-            target=listen_server,    # 執行哪個函式
-            args=(client_socket,),   # 傳遞參數 (tuple)
-            daemon=True              # 定義此thread為背景執行緒 (主程式結束自動結束)
-        ).start()                    # 啟動 thread
-
-        threading.Thread(
-            target=ping_server,
-            args=(client_socket,),
-            daemon=True
-        ).start()
+        # use send queue to avoid blocking main thread
+        send_queue = Queue()
+        send_queue.put(f"ROOM {room}\n".encode())
+        
+        # start listener, pinger, and sender threads
+        threading.Thread(target=listen_server, args=(client_socket,), daemon=True).start()
+        threading.Thread(target=ping_server, args=(client_socket,), daemon=True).start()
+        threading.Thread(target=send_worker, args=(client_socket,), daemon=True).start()
 
         online_mode = True
         print("online mode")
         return True
-    except:
+    except Exception as e:
         online_mode = False
-        print("offline mode")
+        print("offline mode", e)
         return False
 
 def reset_network_state():
-    global game_started, online_mode, client_socket, opponent_state, listen_thread, ping_thread
+    global game_started, online_mode, client_socket, send_queue
     game_started = False
     try:
         if client_socket:
@@ -428,6 +435,13 @@ def reset_network_state():
         pass
     client_socket = None
     online_mode = False
+    if send_queue:
+        try:
+            while True:
+                send_queue.get_nowait()
+        except Empty:
+            pass
+        send_queue = None
 
 def listen_server(sock):
     global opponent_player, opponent_obstacle, online_mode, countdown_start_time, opponent_bg
@@ -446,11 +460,14 @@ def listen_server(sock):
 
                 if msg == "START":
                     countdown_start_time = pygame.time.get_ticks()
+                    continue
                 if msg == "NO_OPPONENT":
                     no_opponent = True
+                    continue
                 if msg == "ROOM_FULL":
                     room_full = True
-                    print("Room is full") ##
+                    print("Room is full")
+                    continue
                 else:
                     payload = json.loads(msg)
                     if payload["type"] == "GAME_RESULT":
@@ -466,9 +483,9 @@ def listen_server(sock):
                     elif payload["type"] == "EVENT":
                         opp_die = True
                     elif payload["type"] == "STATE":
-                        opponent_player = payload["player"]
-                        opponent_obstacle = payload["obstacles"]
-                        opponent_bg = payload["background"]
+                        opponent_player = payload.get("player")
+                        opponent_obstacle = payload.get("obstacles")
+                        opponent_bg = payload.get("background")
 
         except json.JSONDecodeError:   # 半包 / 黏包，正常，忽略
             continue
@@ -485,13 +502,16 @@ def ping_server(sock): # 連線判斷 (心跳)
     while online_mode:
         try:
             ping = {"type": "PING"}
-            sock.sendall((json.dumps(ping) + "\n").encode())
+            if send_queue:
+                send_queue.put((json.dumps(ping) + "\n").encode())
+            else:
+                sock.sendall((json.dumps(ping) + "\n").encode())
         except Exception as e:
             print("[PING ERROR]", e)
             break
         pygame.time.wait(5000)  # 每 5 秒送一次
 
-def send_state(sock, player, obstacles, points, buff, bg):
+def send_state(sock, player, obstacles, points, buff):
     player_state =  {
         "type": "PLAYER_STATE",
         "x": player.rect.x,
@@ -524,7 +544,26 @@ def send_state(sock, player, obstacles, points, buff, bg):
         "background": background_state
     }
 
-    sock.sendall((json.dumps(data) + "\n").encode())
+    if send_queue:
+        send_queue.put((json.dumps(data) + "\n").encode())
+    else:
+        sock.sendall((json.dumps(data) + "\n").encode())
+
+def send_worker(sock):
+    global send_queue, online_mode
+    while online_mode and sock:
+        try:
+            data = send_queue.get(timeout=0.5) # 最多等 0.5 秒
+        except Exception:
+            continue
+        try:
+            # t1 = pygame.time.get_ticks()
+            sock.sendall(data)
+            # t2 = pygame.time.get_ticks()
+            # print(f"[send_worker] sent {len(data)} bytes at {t1}ms (dur {t2 - t1}ms)")
+        except Exception as e:
+            print("[send_worker error]", e)
+            break
 
 def get_scaled(img, scale): # 縮放圖片
     key = (img, scale)
@@ -674,7 +713,7 @@ while running:
 
         if game_result:
             show_finish = True
-        CLOCK.tick(30)
+        CLOCK.tick(FPS)
         continue
 
     # 遊戲準備及倒數
@@ -686,7 +725,7 @@ while running:
             continue
 
         if no_opponent:
-            print("no opponent found") ##
+            print("no opponent found")
             reset_network_state()
             show_init = True
             countdown_start_time = None
@@ -766,8 +805,8 @@ while running:
     #---------------------------- 發送狀態 ----------------------------
     now = pygame.time.get_ticks()
     if online_mode and client_socket and not round_finished:
-        if now - last_send_time >= 50: # 每 100ms 傳送一次
-            send_state(client_socket, player, obstacle_group, points, buff_group, bg_group)
+        if now - last_send_time >= 1: # 每 1ms 傳送一次
+            send_state(client_socket, player, obstacle_group, points, buff_group)
             last_send_time = now
 
     #---------------------------- 畫面顯示 ----------------------------
@@ -790,9 +829,11 @@ while running:
         player_group.draw(SCREEN)
 
     # player v.s obstacle
-    hits = pygame.sprite.spritecollide(player, obstacle_group, False)
+    hits = [o for o in obstacle_group if player.hitbox.colliderect(o.rect)]
     if hits and not player.hidden:
         # pygame.draw.rect(SCREEN, (225, 0, 0), player.rect, 2) # 撞到描紅邊
+        for hit in hits:
+            hit.kill()
         game_speed = GAME_SPEED
         player.lives -= 1
         player.hide() #增加緩衝時間
@@ -804,19 +845,25 @@ while running:
 
         if online_mode:
             waiting_result = True
-            send_state(client_socket, player, obstacle_group, points, buff_group, bg_group)
+            send_state(client_socket, player, obstacle_group, points, buff_group)
 
             die_event = {
                 "type": "EVENT",
                 "event": "PLAYER_DIE"
             }
-            client_socket.sendall((json.dumps(die_event) + "\n").encode())
+            if send_queue:
+                send_queue.put((json.dumps(die_event) + "\n").encode())
+            else:
+                client_socket.sendall((json.dumps(die_event) + "\n").encode())
 
             data = {
                 "type": "GAME_OVER",
                 "score": points
             }
-            client_socket.sendall(json.dumps(data).encode() + b"\n")
+            if send_queue:
+                send_queue.put((json.dumps(data) + "\n").encode())
+            else:
+                client_socket.sendall(json.dumps(data).encode() + b"\n")
 
             player.kill()
             obstacle_group.empty()
@@ -826,8 +873,9 @@ while running:
         continue
         
     # player v.s buff
-    hits = pygame.sprite.spritecollide(player, buff_group, True)
+    hits = [o for o in buff_group if player.hitbox.colliderect(o.rect)]
     for buff in hits:
+        buff.kill()
         game_speed += buff.get_effect()
         game_speed = max(4, min(game_speed, 19))
     

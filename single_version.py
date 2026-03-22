@@ -36,7 +36,7 @@ SMALL_OBT = [pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT
 LARGE_OBT = [pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT2-1.PNG")).convert_alpha(), (82,145)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT2-2.PNG")).convert_alpha(), (125,145)),
            pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT2-3.PNG")).convert_alpha(), (73,145))]
-FLYING = pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT_FLY.PNG")).convert_alpha(), (100,50))
+FLYING = pygame.transform.scale(pygame.image.load(os.path.join("image", "OBT_FLY.PNG")).convert_alpha(), (120,132))
 BUFF = pygame.transform.scale(pygame.image.load(os.path.join("image", "BUFF.PNG")).convert_alpha(), (50,50))
 DEBUFF = pygame.transform.scale(pygame.image.load(os.path.join("image", "DEBUFF.PNG")).convert_alpha(), (50,50))
 MENU = pygame.transform.scale(pygame.image.load(os.path.join("image", "FINISH.PNG")).convert_alpha(), (900,500))
@@ -81,6 +81,7 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = self.X_POS
         self.rect.y = self.Y_POS
+        self.hitbox = pygame.Rect(self.rect.x, self.rect.y, 64, 97)
 
     def update(self):
         if self.hidden:
@@ -102,6 +103,16 @@ class Player(pygame.sprite.Sprite):
         
         if self.step_idx >= self.ANIM_STEP * 2:
             self.step_idx = 0
+        
+        self.update_hitbox()
+
+    def update_hitbox(self):
+        if self.is_slide: 
+            self.hitbox = pygame.Rect(self.rect.x, self.rect.y, 86, 82)
+            self.hitbox.topleft = self.rect.topleft
+        else:
+            self.hitbox = pygame.Rect(self.rect.x, self.rect.y, 64, 97)
+            self.hitbox.midtop = self.rect.midtop
 
     def walk(self):
         self.is_run = True
@@ -174,7 +185,7 @@ def Large_OBT():
     return Obstacle(img, 265)
 
 def Fly_OBT():
-    return Obstacle(FLYING, 270)
+    return Obstacle(FLYING, 190)
 
 def hide_obstacle(): # 隱藏障礙物
     global obstacle_hidden, obstacle_time # 取得全域變數並修改他，而非創建新的變數
@@ -360,20 +371,23 @@ while running:
     buff_group.draw(SCREEN)
 
     # player v.s obstacle
-    hits = pygame.sprite.spritecollide(player, obstacle_group, False)
+    hits = [o for o in obstacle_group if player.hitbox.colliderect(o.rect)]
+    # hits = pygame.sprite.spritecollide(player, obstacle_group, False)
     if hits and not player.hidden:
+        for hit in hits:
+            hit.kill()
         game_speed = GAME_SPEED
         player.hide()
         player.lives -= 1
         hide_obstacle()
 
     if player.lives == 0:
-        # running = False
         show_finish = True
 
     # player v.s buff
-    hits = pygame.sprite.spritecollide(player, buff_group, True)
+    hits = [o for o in buff_group if player.hitbox.colliderect(o.rect)]
     for buff in hits:
+        buff.kill()
         game_speed += buff.get_effect()
         game_speed = max(4, min(game_speed, 19))
 
