@@ -324,7 +324,7 @@ def draw_start_menu():
     multi_rect = pygame.Rect(550, 330, 200, 50)
     pygame.draw.rect(SCREEN, LIGHT_YELLOW, single_rect)
     pygame.draw.rect(SCREEN, LIGHT_YELLOW, multi_rect)
-    draw_text(SCREEN, 'Single Plyer', 50, 650, 260, YELLOW)
+    draw_text(SCREEN, 'Single Player', 50, 650, 260, YELLOW)
     draw_text(SCREEN, 'Battle', 50, 650, 330, YELLOW)
     if room_full:
         draw_text(SCREEN, 'The room is full', 35, 650, 385, RED)
@@ -738,7 +738,7 @@ while running:
                 SCREEN.fill(BACKGROUND)
                 draw_text(SCREEN, "Waiting for opponent...", 60, WIDTH // 2, HEIGHT // 2 - 60, YELLOW)
                 pygame.display.update()
-                CLOCK.tick(30)
+                CLOCK.tick(FPS)
                 continue
         remaining = countdown_seconds - ((pygame.time.get_ticks() - countdown_start_time) // 1000)
         SCREEN.fill(BACKGROUND)
@@ -749,7 +749,7 @@ while running:
             game_started = True
         
         pygame.display.update()
-        CLOCK.tick(30)
+        CLOCK.tick(FPS)
         continue
 
     # CLOCK.tick(FPS) # 一秒 FPS 幀 (FPS 次迴圈) 同時回傳上一幀教過的毫秒數
