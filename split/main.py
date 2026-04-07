@@ -9,8 +9,7 @@ from reset import *
 from draw import *
 from player import *
 from background import *
-from obstacle import *
-from buff import *
+from gameElements import *
 
 show_init = True
 show_finish = False
