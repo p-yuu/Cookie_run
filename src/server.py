@@ -2,21 +2,22 @@ import asyncio
 import json
 import time
 
-HOST = "0.0.0.0"
-PORT = 5000
+HOST = "192.168.0.111"
+PORT = 5050
 
-ROOM_TTL = 30          # 房間 30 秒沒活動就刪
-PING_TIMEOUT = 15      # client 超過 15 秒沒 ping 視為斷線
-DEBUG_INTERVAL = 5     # debug 每 5 秒印一次
+ROOM_TTL = 30  # 房間 30 秒沒活動就刪
+PING_TIMEOUT = 15  # client 超過 15 秒沒 ping 視為斷線
+DEBUG_INTERVAL = 5  # debug 每 5 秒印一次
 DEBUG = True
 PING_MIN_INTERVAL = 1.0
 last_ping_time = {}
 
-rooms = {} # room_id -> [writer1, writer2]
-room_events = {} # room_id -> asyncio.Event (避免 busy wait)
-final_scores = {} # room_id -> {writer: score}
+rooms = {}  # room_id -> [writer1, writer2]
+room_events = {}  # room_id -> asyncio.Event (避免 busy wait)
+final_scores = {}  # room_id -> {writer: score}
 room_last_active = {}  # room_id -> timestamp
 writer_last_ping = {}  # writer -> timestamp
+
 
 # TTL
 async def watchdog():
@@ -45,6 +46,7 @@ async def watchdog():
 
         await asyncio.sleep(3)
 
+
 # log / debug
 async def debug_monitor():
     while True:
@@ -54,6 +56,7 @@ async def debug_monitor():
         print("------------------")
         await asyncio.sleep(DEBUG_INTERVAL)
 
+
 def reset_all():
     rooms.clear()
     room_events.clear()
@@ -61,6 +64,7 @@ def reset_all():
     room_last_active.clear()
     writer_last_ping.clear()
     print("[INIT] server state cleared")
+
 
 # 移除 writer
 def remove_writer(writer, room_id):
@@ -75,9 +79,10 @@ def remove_writer(writer, room_id):
         room_events.pop(room_id, None)
         room_last_active.pop(room_id, None)
         final_scores.pop(room_id, None)
-    else: # 確保等待時不會 deadlock
+    else:  # 確保等待時不會 deadlock
         if room_id in room_events:
             room_events[room_id].set()
+
 
 # 安全寫入
 async def safe_write(writer: asyncio.StreamWriter, data: bytes):
@@ -89,6 +94,7 @@ async def safe_write(writer: asyncio.StreamWriter, data: bytes):
         remove_writer(writer, None)
         return False
 
+
 # 轉發資料
 async def relay(sender, room_id, data: bytes):
     for w in rooms.get(room_id, []).copy():
@@ -98,6 +104,7 @@ async def relay(sender, room_id, data: bytes):
         if not ok:
             print(f"[REMOVE] {w.get_extra_info('peername')} disconnected during relay")
             rooms[room_id].remove(w)
+
 
 async def handle_client(reader, writer):
     addr = writer.get_extra_info("peername")
@@ -141,11 +148,13 @@ async def handle_client(reader, writer):
                     alive = []
                     for w in rooms[room_id].copy():
                         ok = await safe_write(w, b"START\n")
-                        print(f"[ROOM] {room_id} START sent to 2 players") ##
+                        print(f"[ROOM] {room_id} START sent to 2 players")  ##
                         if ok:
                             alive.append(w)
                         else:
-                            print(f"[REMOVE] {w.get_extra_info('peername')} disconnected before START")
+                            print(
+                                f"[REMOVE] {w.get_extra_info('peername')} disconnected before START"
+                            )
                     rooms[room_id] = alive
 
                     if len(alive) < 2:
@@ -159,7 +168,9 @@ async def handle_client(reader, writer):
                     room_events[room_id].set()
                 else:
                     try:
-                        await asyncio.wait_for(room_events[rid].wait(), timeout=ROOM_TTL)
+                        await asyncio.wait_for(
+                            room_events[rid].wait(), timeout=ROOM_TTL
+                        )
                         if room_id not in rooms:
                             await safe_write(writer, b"NO_OPPONENT\n")
                             remove_writer(writer, rid)
@@ -204,13 +215,38 @@ async def handle_client(reader, writer):
                         (w1, s1), (w2, s2) = final_scores[room_id].items()
 
                         if s1 > s2:
-                            r1 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s1, "OPP_SCORE": s2}
-                            r2 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s2, "OPP_SCORE": s1}
+                            r1 = {
+                                "type": "GAME_RESULT",
+                                "RESULT": "WIN",
+                                "MY_SCORE": s1,
+                                "OPP_SCORE": s2,
+                            }
+                            r2 = {
+                                "type": "GAME_RESULT",
+                                "RESULT": "LOSE",
+                                "MY_SCORE": s2,
+                                "OPP_SCORE": s1,
+                            }
                         elif s1 < s2:
-                            r1 = {"type": "GAME_RESULT", "RESULT": "LOSE", "MY_SCORE": s1, "OPP_SCORE": s2}
-                            r2 = {"type": "GAME_RESULT", "RESULT": "WIN", "MY_SCORE": s2, "OPP_SCORE": s1}
+                            r1 = {
+                                "type": "GAME_RESULT",
+                                "RESULT": "LOSE",
+                                "MY_SCORE": s1,
+                                "OPP_SCORE": s2,
+                            }
+                            r2 = {
+                                "type": "GAME_RESULT",
+                                "RESULT": "WIN",
+                                "MY_SCORE": s2,
+                                "OPP_SCORE": s1,
+                            }
                         else:
-                            r1 = r2 = {"type": "GAME_RESULT", "RESULT": "DRAW", "MY_SCORE": s1, "OPP_SCORE": s2}
+                            r1 = r2 = {
+                                "type": "GAME_RESULT",
+                                "RESULT": "DRAW",
+                                "MY_SCORE": s1,
+                                "OPP_SCORE": s2,
+                            }
 
                         await safe_write(w1, (json.dumps(r1) + "\n").encode())
                         await safe_write(w2, (json.dumps(r2) + "\n").encode())
@@ -238,6 +274,7 @@ async def handle_client(reader, writer):
         except (ConnectionResetError, BrokenPipeError):
             pass
 
+
 async def main():
     reset_all()
     server = await asyncio.start_server(handle_client, HOST, PORT)
@@ -249,6 +286,7 @@ async def main():
 
     async with server:
         await server.serve_forever()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

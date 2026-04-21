@@ -1,7 +1,8 @@
-import pygame
 import config
+import pygame
 
-def reset_game(PlayerClass, BackgroundClass, scale=1.0):    
+
+def reset_game(PlayerClass, BackgroundClass, scale=1.0):
     # ------- 重建玩家和背景 -------
     config.player_group = pygame.sprite.Group()
     player = PlayerClass()
@@ -9,8 +10,10 @@ def reset_game(PlayerClass, BackgroundClass, scale=1.0):
 
     config.bg_group = pygame.sprite.Group()
     for i in range(4):
-        config.bg_group.add(BackgroundClass(config.BG, 'bg', i * config.WIDTH, scale))
-        config.bg_group.add(BackgroundClass(config.TRACK, 'track', i * config.WIDTH, scale))
+        config.bg_group.add(BackgroundClass(config.BG, "bg", i * config.WIDTH, scale))
+        config.bg_group.add(
+            BackgroundClass(config.TRACK, "track", i * config.WIDTH, scale)
+        )
 
     config.obstacle_group = pygame.sprite.Group()
     config.buff_group = pygame.sprite.Group()
@@ -25,13 +28,13 @@ def reset_game(PlayerClass, BackgroundClass, scale=1.0):
     config.buff_count = 0
 
     # 雙人 PK 設定
-    config.room_full = False         # 房間已有兩個人
-    config.round_finished = False    # 本地端結束
-    config.waiting_result = False    # 等待server的遊戲結果
-    config.game_result = None        # WIN / LOSE / DRAW
+    config.room_full = False  # 房間已有兩個人
+    config.round_finished = False  # 本地端結束
+    config.waiting_result = False  # 等待server的遊戲結果
+    config.game_result = None  # WIN / LOSE / DRAW
     config.game_started = False
-    config.no_opponent = False       # 沒有配對到對手
-    config.opp_die = False           # 對手死亡
+    config.no_opponent = False  # 沒有配對到對手
+    config.opp_die = False  # 對手死亡
     config.my_score = None
     config.opp_score = None
 
@@ -41,8 +44,8 @@ def reset_game(PlayerClass, BackgroundClass, scale=1.0):
     config.opponent_bg = None
 
     # 計時
-    config.last_send_time = 0          # 傳送資料
+    config.last_send_time = 0  # 傳送資料
     config.countdown_start_time = None
-    config.finish_time = None          # 本地端結束遊戲時間
+    config.finish_time = None  # 本地端結束遊戲時間
 
     return player

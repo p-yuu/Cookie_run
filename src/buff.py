@@ -1,7 +1,9 @@
-import pygame
 import random
+
 import config
+import pygame
 from config import BUFF, DEBUFF, WIDTH
+
 
 class Buff(pygame.sprite.Sprite):
     def __init__(self, kind):
@@ -16,12 +18,12 @@ class Buff(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect()
         self.rect.x = WIDTH
-        self.rect.y = random.choice([150,355])
-    
+        self.rect.y = random.choice([150, 355])
+
     def update(self):
         self.rect.x -= config.game_speed
         if self.rect.right <= 0:
             self.kill()
-    
+
     def get_effect(self):
         return self.effect

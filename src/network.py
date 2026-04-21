@@ -1,15 +1,16 @@
-import pygame
 import json
 import socket
 import threading
+from queue import Empty, Queue
+
+import pygame
+
 import config
 from config import SCREEN
 from draw import *
-from queue import Queue, Empty
 
-
-SERVER_IP = "192.168.100.104"
-SERVER_PORT = 5000
+SERVER_IP = "192.168.0.111"
+SERVER_PORT = 5050
 
 
 def input_room():
@@ -17,7 +18,7 @@ def input_room():
     active = True
 
     while active:
-        SCREEN.fill((220,220,220))
+        SCREEN.fill((220, 220, 220))
         draw_text(SCREEN, f"Enter Room ID: {room}", 40, 450, 200)
         pygame.display.update()
 
@@ -31,7 +32,8 @@ def input_room():
                 elif e.key == pygame.K_BACKSPACE:
                     room = room[:-1]  # 刪掉最後一個字元
                 else:
-                    room += e.unicode # 實際輸入的字元
+                    room += e.unicode  # 實際輸入的字元
+
 
 def init_network():
     try:
@@ -41,15 +43,21 @@ def init_network():
         if not room:
             config.online_mode = False
             return False
-        
+
         # use send queue to avoid blocking main thread
         config.send_queue = Queue()
         config.send_queue.put(f"ROOM {room}\n".encode())
-        
+
         # start listener, pinger, and sender threads
-        threading.Thread(target=listen_server, args=(config.client_socket,), daemon=True).start()
-        threading.Thread(target=ping_server, args=(config.client_socket,), daemon=True).start()
-        threading.Thread(target=send_worker, args=(config.client_socket,), daemon=True).start()
+        threading.Thread(
+            target=listen_server, args=(config.client_socket,), daemon=True
+        ).start()
+        threading.Thread(
+            target=ping_server, args=(config.client_socket,), daemon=True
+        ).start()
+        threading.Thread(
+            target=send_worker, args=(config.client_socket,), daemon=True
+        ).start()
 
         config.online_mode = True
         print("online mode")
@@ -58,6 +66,7 @@ def init_network():
         config.online_mode = False
         print("offline mode", e)
         return False
+
 
 def reset_network_state():
     config.game_started = False
@@ -75,6 +84,7 @@ def reset_network_state():
         except Empty:
             pass
         config.send_queue = None
+
 
 def listen_server(sock):
     buffer = ""
@@ -118,10 +128,10 @@ def listen_server(sock):
                         config.opponent_obstacle = payload.get("obstacles")
                         config.opponent_bg = payload.get("background")
 
-        except json.JSONDecodeError:   # 半包 / 黏包，正常，忽略
+        except json.JSONDecodeError:  # 半包 / 黏包，正常，忽略
             continue
 
-        except OSError:   # 真正斷線
+        except OSError:  # 真正斷線
             config.online_mode = False
             break
 
@@ -129,7 +139,8 @@ def listen_server(sock):
             print("[listen_server error]", e)
             continue
 
-def ping_server(sock): # 連線判斷 (心跳)
+
+def ping_server(sock):  # 連線判斷 (心跳)
     while config.online_mode:
         try:
             ping = {"type": "PING"}
@@ -142,8 +153,9 @@ def ping_server(sock): # 連線判斷 (心跳)
             break
         pygame.time.wait(5000)  # 每 5 秒送一次
 
+
 def send_state(sock, player, obstacles, points, buff):
-    player_state =  {
+    player_state = {
         "type": "PLAYER_STATE",
         "x": player.rect.x,
         "y": player.rect.y,
@@ -155,24 +167,26 @@ def send_state(sock, player, obstacles, points, buff):
     }
 
     obstacles_state = {
-        "obstacles": [{"x": o.rect.x, "y": o.rect.y, "kind": o.kind, "index": o.index}for o in obstacles],
-        "buffs": [{"x": b.rect.x, "y": b.rect.y, "effect": b.get_effect()}for b in buff]
+        "obstacles": [
+            {"x": o.rect.x, "y": o.rect.y, "kind": o.kind, "index": o.index}
+            for o in obstacles
+        ],
+        "buffs": [
+            {"x": b.rect.x, "y": b.rect.y, "effect": b.get_effect()} for b in buff
+        ],
     }
 
     track_x = min(b.rect.x for b in config.bg_group if b.mode == "track")
     bg_x = min(b.rect.x for b in config.bg_group if b.mode == "bg")
 
-    background_state = {
-        "track_x": track_x,
-        "bg_x": bg_x
-    }
+    background_state = {"track_x": track_x, "bg_x": bg_x}
 
     data = {
         "type": "STATE",
         "time": pygame.time.get_ticks(),
         "player": player_state,
         "obstacles": obstacles_state,
-        "background": background_state
+        "background": background_state,
     }
 
     if config.send_queue:
@@ -180,10 +194,11 @@ def send_state(sock, player, obstacles, points, buff):
     else:
         sock.sendall((json.dumps(data) + "\n").encode())
 
+
 def send_worker(sock):
     while config.online_mode and sock:
         try:
-            data = config.send_queue.get(timeout=0.5) # 最多等 0.5 秒
+            data = config.send_queue.get(timeout=0.5)  # 最多等 0.5 秒
         except Exception:
             continue
         try:
