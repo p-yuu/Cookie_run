@@ -1,0 +1,61 @@
+{
+    /* ---------------------------------------------------------
+       Linting & Formatting (Ruff)
+       --------------------------------------------------------- */
+    // 指定 Ruff 為專案預設格式化引擎
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    // 啟用存檔時自動執行代碼格式化
+    "editor.formatOnSave": true,
+    // 存檔時自動執行代碼修復：包含移除未使用的 Import 與 排序優化
+    "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "explicit",
+        "source.organizeImports.ruff": "explicit"
+    },
+
+    /* ---------------------------------------------------------
+       File Persistence & Encoding
+       --------------------------------------------------------- */
+    // 檔案存檔策略：當視窗失去焦點 (Focus Change) 時自動存檔
+    "files.autoSave": "onFocusChange",
+    // 啟用編碼自動偵測，確保跨平台（Windows/Mac）中文字元顯示正常
+    "files.autoGuessEncoding": true,
+
+    /* ---------------------------------------------------------
+       Editor UI & UX Enhancements
+       --------------------------------------------------------- */
+    // 啟用自動換行，防止長代碼超出螢幕邊界
+    "editor.wordWrap": "on",
+    // 括號彩虹對齊
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs": "active",
+    // 固定捲軸 (Sticky Scroll)
+    "editor.stickyScroll.enabled": true,
+    // 視覺平滑化
+    "editor.cursorSmoothCaretAnimation": "on",
+    "editor.smoothScrolling": true,
+    "editor.fontSize": 16,
+
+    /* ---------------------------------------------------------
+       Python Environment Settings
+       --------------------------------------------------------- */
+    // 啟動終端機時，自動執行虛擬環境的啟動指令 (activate)
+    "python.terminal.activateEnvironment": true,
+    // 指定專案預設的 Python 直譯器路徑，確保工作區自動偵測並選取 venv 環境
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+
+    /* ---------------------------------------------------------
+       Explorer & Safety Guardrails
+       --------------------------------------------------------- */
+    // 防止檔案總管誤觸：移動檔案與刪除時需彈窗確認
+    "explorer.confirmDragAndDrop": true,
+    "explorer.confirmDelete": true,
+    // 檔案過濾：隱藏編譯快取與特定設定檔，維持工作區整潔
+    "files.exclude": {
+        "**/__pycache__": true,         // Python 字節碼快取
+        "**/*.pyc": true,               // Python 編譯檔
+        "pyproject.toml": true,         // Ruff 規則設定檔 (隱藏以避免學員誤改)
+        ".DS_Store": true,              // macOS 系統描述檔
+        ".vscode": false,               // 保留顯示以利環境偵錯
+        "venv": false                   // 保留顯示以確認虛擬環境狀態
+    }
+}

@@ -1,0 +1,20 @@
+{
+  "recommendations": [
+    // --- Python 核心 ---
+    "ms-python.python",               // 主程式
+    "ms-python.vscode-pylance",       // 大腦 (補全)
+    "ms-python.debugpy",              // 除錯 (Debugger)
+    "ms-python.python-environments",  // 環境管理 (venv 偵測)
+
+    // --- 程式碼品質與工具 ---
+    "charliermarsh.ruff",             // 你的自動排版神助手
+    "usernamehw.errorlens",           // 錯誤直接顯示
+    "oderwat.indent-rainbow",         // 縮排彩虹
+    "christian-kohler.path-intellisense", // 路徑補全
+
+    // --- 介面與教學輔助 ---
+    "MS-CEINTL.vscode-language-pack-zh-hant", // 繁體中文
+    "PKief.material-icon-theme",      // 圖示美化
+    "tonybaloney.vscode-pets",        // 電子雞
+  ]
+}
