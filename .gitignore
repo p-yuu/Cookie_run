@@ -1,3 +1,19 @@
+# --- Python 產生的暫存檔 ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- 備份與測試檔 ---
 main_copy.py
 stress_test.py
 main-opm.py
+
+# --- 虛擬環境 ---
+venv/
+ENV/
+
+# --- 系統雜物 ---
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
