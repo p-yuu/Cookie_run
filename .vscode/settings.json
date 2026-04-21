@@ -40,8 +40,6 @@
        --------------------------------------------------------- */
     // 啟動終端機時，自動執行虛擬環境的啟動指令 (activate)
     "python.terminal.activateEnvironment": true,
-    // 指定專案預設的 Python 直譯器路徑，確保工作區自動偵測並選取 venv 環境
-    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
 
     /* ---------------------------------------------------------
        Explorer & Safety Guardrails
