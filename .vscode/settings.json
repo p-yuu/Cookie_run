@@ -55,5 +55,13 @@
         ".DS_Store": true,              // macOS 系統描述檔
         ".vscode": false,               // 保留顯示以利環境偵錯
         "venv": false                   // 保留顯示以確認虛擬環境狀態
-    }
+    },
+    
+    /* ---------------------------------------------------------
+       Type Checking Settings
+       --------------------------------------------------------- */
+    // 關閉 Pylance 的自動類型檢查建議，避免干擾學員
+    "python.analysis.typeCheckingMode": "off",
+    // 隱藏類型檢查的彈窗通知
+    "python.analysis.inlayHints.functionReturnTypes": false
 }
