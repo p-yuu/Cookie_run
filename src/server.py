@@ -2,8 +2,8 @@ import asyncio
 import json
 import time
 
-HOST = "192.168.0.111"
-PORT = 5050
+HOST = "0.0.0.0"
+PORT = 5000
 
 ROOM_TTL = 30  # 房間 30 秒沒活動就刪
 PING_TIMEOUT = 15  # client 超過 15 秒沒 ping 視為斷線

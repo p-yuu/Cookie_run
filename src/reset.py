@@ -1,5 +1,7 @@
-import config
 import pygame
+
+import config
+from config import BG, TRACK, WIDTH
 
 
 def reset_game(PlayerClass, BackgroundClass, scale=1.0):
@@ -10,10 +12,8 @@ def reset_game(PlayerClass, BackgroundClass, scale=1.0):
 
     config.bg_group = pygame.sprite.Group()
     for i in range(4):
-        config.bg_group.add(BackgroundClass(config.BG, "bg", i * config.WIDTH, scale))
-        config.bg_group.add(
-            BackgroundClass(config.TRACK, "track", i * config.WIDTH, scale)
-        )
+        config.bg_group.add(BackgroundClass(BG, "bg", i * WIDTH, scale))
+        config.bg_group.add(BackgroundClass(TRACK, "track", i * WIDTH, scale))
 
     config.obstacle_group = pygame.sprite.Group()
     config.buff_group = pygame.sprite.Group()

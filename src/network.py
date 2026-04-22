@@ -9,8 +9,8 @@ import config
 from config import SCREEN
 from draw import *
 
-SERVER_IP = "192.168.0.111"
-SERVER_PORT = 5050
+SERVER_IP = "192.168.100.104"
+SERVER_PORT = 5000
 
 
 def input_room():

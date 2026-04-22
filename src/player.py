@@ -1,5 +1,6 @@
 import pygame
-from config import HIDE, JUMPING, RUNNING, SLIDING
+
+from config import CLOCK, FPS, HIDE, JUMPING, RUNNING, SCREEN, SLIDING
 
 
 class Player(pygame.sprite.Sprite):
@@ -107,3 +108,29 @@ class Player(pygame.sprite.Sprite):
         self.hide_time = pygame.time.get_ticks()  # 回傳遊戲開始後的毫秒數
         self.rect.y = self.Y_POS
         self.image = HIDE
+
+
+if __name__ == "__main__":
+    player = Player()
+    run = True
+    while run:
+        CLOCK.tick(FPS)
+        # ---------- 取得輸入 ----------
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_UP, pygame.K_SPACE):
+                    player.try_jump()
+                elif event.key == pygame.K_DOWN:
+                    player.is_slide = True
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_DOWN:
+                    player.is_slide = False
+        # ---------- 更新遊戲 ----------
+        player.update()
+        # ---------- 畫面顯示 ----------
+        SCREEN.fill((255, 255, 255))
+        SCREEN.blit(player.image, player.rect)
+        pygame.display.update()
+    pygame.quit()

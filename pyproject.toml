@@ -1,13 +1,24 @@
+[tool.ruff]
+# 設定每行長度上限（預設 88 有點太嚴格，120 比較剛好）
+line-length = 120
+
 [tool.ruff.lint]
+# 這裡填入要忽略的「不重要警告」
 ignore = [
-    "F403", # 停用 import * 的警告 (學生超愛用這個)
-    "F405", # 停用 星號匯入導致的名稱來源不明警告
-    "E722", # 停用 bare except 的警告 (學生常寫 try-except 但不指定錯誤類型)
-    
-    # --- 針對營隊新增的「寬容」規則 ---
-    "E501", # 停用「行數過長」警告 (Pygame 參數很多，一行寫太長很正常)
-    "F401", # 停用「未使用 import」警告 (學生常先 import 好工具，等下才要用)
-    "E402", # 停用「import 必須在最上方」警告 (有時學生會為了除錯在 code 中間補 import)
-    "B008", # 停用「函式調用作為預設參數」警告 (Pygame 初始化時學生常犯這個)
-    "RET504" # 停用「回傳前多餘的變數賦值」警告 (學生習慣先 result = ... 再 return result)
+    # --- 圖片中出現的星號匯入系列 ---
+    "F403", # 停用 "import *" 的警告
+    "F405", # 停用 "從星號匯入可能導致找不到名稱" 的警告
+
+    # --- 教學現場最常遇到的干擾項 ---
+    "F401", # 停用 "未使用的 import"：學生常會先 import 好備用，噴黃線會讓他們以為寫錯
+    "E501", # 停用 "單行過長"：Pygame 畫圓、畫矩形的參數很多，一行寫長一點沒關係
+    "E722", # 停用 "bare except"：學生常寫 try-except 但不指定 Error 類型
+    "E402", # 停用 "import 必須在最上方"：有時學生會在程式中間亂塞 import 除錯
+    "B008", # 停用 "函式調用作為預設參數"：Pygame 裡常寫 pos=pygame.Vector2(0,0)，這規則太深奧不需教
+    "RET504", # 停用 "多餘的變數賦值"：學生習慣先 result = ... 再 return result，這對理解邏輯有幫助
+    "FBT",    # 停用 "Boolean Positional Argument"：防止學生因為函數參數用了 True/False 被噴警告
 ]
+
+[tool.ruff.format]
+# 強制使用雙引號，讓大家的程式碼長得一模一樣
+quote-style = "double"

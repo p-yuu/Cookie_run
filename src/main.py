@@ -1,11 +1,11 @@
 import json
 import random
 
+import pygame
+
 import config
 import network
-import pygame
 from background import *
-from buff import *
 from config import (
     BACKGROUND,
     CLOCK,
@@ -18,7 +18,7 @@ from config import (
     YELLOW,
 )
 from draw import *
-from obstacle import *
+from gameElements import *
 from player import *
 from reset import *
 

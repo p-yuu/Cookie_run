@@ -1,5 +1,7 @@
-import config
 import pygame
+
+import config
+from config import BG, CLOCK, FPS, SCREEN, TRACK, WIDTH
 
 
 class Background(pygame.sprite.Sprite):
@@ -24,3 +26,25 @@ class Background(pygame.sprite.Sprite):
             self.rect.x = round(
                 self.rect.width * 3 + self.rect.right
             )  # x 大於 0 的 track 有三塊
+
+
+if __name__ == "__main__":
+    config.game_speed = 10
+    config.bg_group = pygame.sprite.Group()
+    for i in range(4):
+        config.bg_group.add(Background(BG, "bg", i * WIDTH, 1))
+        config.bg_group.add(Background(TRACK, "track", i * WIDTH, 1))
+
+    run = True
+    while run:
+        CLOCK.tick(FPS)
+        # ---------- 取得輸入 ----------
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+        # ---------- 更新遊戲 ----------
+        config.bg_group.update()
+        # ---------- 畫面顯示 ----------
+        SCREEN.fill((191, 221, 226))
+        config.bg_group.draw(SCREEN)
+        pygame.display.update()
